@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Russian Roulette · REAL SCREAMER FULLSCREEN</title>
+    <title>Russian Roulette · Комнаты + СКРИМЕР</title>
     <style>
         * {
             box-sizing: border-box;
@@ -191,14 +191,14 @@
             display: none;
         }
 
-        /* СКРИМЕР НА ВЕСЬ ЭКРАН — РЕАЛЬНО СТРАШНО */
+        /* СКРИМЕР НА ВЕСЬ ЭКРАН — ИСПОЛЬЗУЕТ scary.jpeg */
         .screamer {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: #000;
+            background: black;
             z-index: 9999;
             display: flex;
             align-items: center;
@@ -213,7 +213,7 @@
             visibility: visible;
         }
 
-        .screamer img, .screamer video {
+        .screamer img {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -252,8 +252,7 @@
 </div>
 
 <div id="screamer" class="screamer">
-    <!-- Реально страшное изображение (полноэкранный хоррор) -->
-    <img id="screamerImg" src="https://i.imgur.com/8qgH0nN.jpg" alt="SCREAMER" style="display:block">
+    <img id="screamerImg" src="/scary.jpeg" alt="SCREAMER" style="display:block; width:100%; height:100%; object-fit:cover">
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -281,24 +280,22 @@
     const screamerDiv = document.getElementById('screamer');
     const screamerImg = document.getElementById('screamerImg');
 
-    // СТРАШНЫЙ СКРИМЕР (1 секунда)
+    // СКРИМЕР — 1 секунда, страшная картинка scary.jpeg
     function playScreamer() {
         if (!screamerDiv) return;
-
-        // Принудительно загружаем картинку, если ещё не загружена
+        // Принудительно обновляем (если надо)
         if (screamerImg) {
-            screamerImg.src = "https://i.imgur.com/8qgH0nN.jpg";
+            screamerImg.src = '/scary.jpeg';
         }
-
         screamerDiv.classList.add('active');
-
-        // Включаем звук через скрытый Audio (необязательно, но страшнее)
+        
+        // СТРАШНЫЙ ЗВУК (если браузер не блокирует)
         try {
             let audio = new Audio('https://www.myinstants.com/media/sounds/scream-soundeffect.mp3');
-            audio.volume = 0.7;
-            audio.play().catch(e => console.log('audio blocked'));
+            audio.volume = 0.8;
+            audio.play().catch(e => console.log("audio blocked"));
         } catch(e) {}
-
+        
         setTimeout(() => {
             screamerDiv.classList.remove('active');
         }, 1000);
@@ -371,7 +368,7 @@
         currentRoomId = data.roomId;
         isCreator = true;
         myId = socket.id;
-        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} готова. Ожидай игроков, потом нажми СТАРТ.`;
+        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} готова. Ожидай игроков, потом СТАРТ.`;
         startGameBtn.classList.remove('hidden');
         updatePlayersUI(data.players);
     });
@@ -399,7 +396,7 @@
         myTurn = (data.playerId === myId);
         if (myTurn) {
             enableShoot(true);
-            statusMsgDiv.innerText = "🔫 ТВОЯ ОЧЕРЕДЬ! 🔫";
+            statusMsgDiv.innerText = "🔫 ТВОЯ ОЧЕРЕДЬ! СТРЕЛЯЙ! 🔫";
         } else {
             enableShoot(false);
             statusMsgDiv.innerText = "⌛ Ждём оппонента...";
@@ -413,7 +410,7 @@
             if (data.playerId === myId) {
                 statusMsgDiv.innerText = "💀 ТЫ ПРОИГРАЛ! 💀";
                 enableShoot(false);
-                playScreamer();   // СТРАШНЫЙ СКРИМЕР
+                playScreamer();   // ← СКРИМЕР scary.jpeg
             } else {
                 statusMsgDiv.innerText = "💀 ИГРОК ВЫБЫЛ! 💀";
             }
@@ -487,7 +484,6 @@
         }
     }
 
-    // Сохраняем смену хода
     socket.on('turn-update', (data) => {
         window.currentTurnId = data.playerId;
         updateTurnHighlight();
