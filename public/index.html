@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Russian Roulette · Rooms + Screamer</title>
+    <title>Russian Roulette · REAL SCREAMER FULLSCREEN</title>
     <style>
         * {
             box-sizing: border-box;
@@ -20,7 +20,6 @@
             gap: 20px;
         }
 
-        /* ЛЕВАЯ ПАНЕЛЬ — СПИСОК КОМНАТ */
         .rooms-panel {
             width: 280px;
             background: #2d221c;
@@ -82,7 +81,6 @@
             font-size: 16px;
         }
 
-        /* ОСНОВНАЯ ИГРОВАЯ ОБЛАСТЬ */
         .game-container {
             flex: 1;
             background: #2d221c;
@@ -193,21 +191,21 @@
             display: none;
         }
 
-        /* СКРИМЕР (полный экран) */
+        /* СКРИМЕР НА ВЕСЬ ЭКРАН — РЕАЛЬНО СТРАШНО */
         .screamer {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: black;
+            background: #000;
             z-index: 9999;
             display: flex;
             align-items: center;
             justify-content: center;
             opacity: 0;
             visibility: hidden;
-            transition: 0.05s linear;
+            transition: 0s linear;
         }
 
         .screamer.active {
@@ -215,7 +213,7 @@
             visibility: visible;
         }
 
-        .screamer video {
+        .screamer img, .screamer video {
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -233,14 +231,12 @@
 </head>
 <body>
 
-<!-- ЛЕВАЯ ПАНЕЛЬ: комнаты -->
 <div class="rooms-panel">
-    <h3>🏠 ИГРОВЫЕ КОМНАТЫ</h3>
+    <h3>💀 ИГРОВЫЕ КОМНАТЫ 💀</h3>
     <div class="room-list" id="roomList"></div>
-    <button class="create-btn" id="createRoomBtn">➕ СОЗДАТЬ КОМНАТУ</button>
+    <button class="create-btn" id="createRoomBtn">🔪 СОЗДАТЬ КОМНАТУ</button>
 </div>
 
-<!-- ОСНОВНОЙ БЛОК ИГРЫ -->
 <div class="game-container" id="gameContainer">
     <div id="joinRoomArea" class="join-area">
         <input type="text" id="playerNameInput" class="join-input" placeholder="Твоё имя">
@@ -251,15 +247,13 @@
         <div class="status-message" id="statusMsg">Ожидание...</div>
         <div class="gun" id="gunIcon">🔫 💀 🔫</div>
         <button id="startGameBtn" class="start-btn hidden">⚔️ СТАРТ ИГРЫ</button>
-        <button id="shootBtn" class="shoot-btn disabled" disabled>💥 ВЫСТРЕЛИТЬ</button>
+        <button id="shootBtn" class="shoot-btn disabled" disabled>💀 ВЫСТРЕЛИТЬ 💀</button>
     </div>
 </div>
 
-<!-- СКРИМЕР НА ВЕСЬ ЭКРАН -->
 <div id="screamer" class="screamer">
-    <video id="screamerVideo" autoplay muted playsinline>
-        <source src="https://media.giphy.com/media/v1.Y2lkPTEyMGNvbW1lbnRhcnkmY2Q9c2t5Ync2azlzZmJvNjFwZzh2aHZoYXVuYmI2b2p3cCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7abB06u9bNzA8LC8/giphy.mp4" type="video/mp4">
-    </video>
+    <!-- Реально страшное изображение (полноэкранный хоррор) -->
+    <img id="screamerImg" src="https://i.imgur.com/8qgH0nN.jpg" alt="SCREAMER" style="display:block">
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -273,7 +267,6 @@
     let myTurn = false;
     let currentPlayers = [];
 
-    // DOM-элементы
     const roomListDiv = document.getElementById('roomList');
     const createRoomBtn = document.getElementById('createRoomBtn');
     const joinRoomArea = document.getElementById('joinRoomArea');
@@ -286,22 +279,31 @@
     const shootBtn = document.getElementById('shootBtn');
     const gunIconSpan = document.getElementById('gunIcon');
     const screamerDiv = document.getElementById('screamer');
-    const screamerVideo = document.getElementById('screamerVideo');
+    const screamerImg = document.getElementById('screamerImg');
 
-    // === ПОЛНОЭКРАННЫЙ СКРИМЕР НА 1 СЕКУНДУ ===
+    // СТРАШНЫЙ СКРИМЕР (1 секунда)
     function playScreamer() {
-        if (!screamerVideo) return;
-        screamerVideo.currentTime = 0;
+        if (!screamerDiv) return;
+
+        // Принудительно загружаем картинку, если ещё не загружена
+        if (screamerImg) {
+            screamerImg.src = "https://i.imgur.com/8qgH0nN.jpg";
+        }
+
         screamerDiv.classList.add('active');
-        // Попробуем запустить видео, если оно не запустилось
-        screamerVideo.play().catch(e => console.log("autoplay blocked, but showing black"));
+
+        // Включаем звук через скрытый Audio (необязательно, но страшнее)
+        try {
+            let audio = new Audio('https://www.myinstants.com/media/sounds/scream-soundeffect.mp3');
+            audio.volume = 0.7;
+            audio.play().catch(e => console.log('audio blocked'));
+        } catch(e) {}
+
         setTimeout(() => {
             screamerDiv.classList.remove('active');
-            if (screamerVideo) screamerVideo.pause();
         }, 1000);
     }
 
-    // === ОТОБРАЖЕНИЕ СПИСКА КОМНАТ СЛЕВА ===
     function updateRoomsList(rooms) {
         roomListDiv.innerHTML = '';
         rooms.forEach(room => {
@@ -315,7 +317,6 @@
         });
     }
 
-    // === ПРИГЛАШЕНИЕ В КОМНАТУ ЧЕРЕЗ ЛЕВОЕ МЕНЮ ===
     function promptJoinRoom(roomId) {
         if (!myName) {
             const name = prompt('Введи своё имя:');
@@ -327,10 +328,9 @@
         socket.emit('join-room', { roomId, playerName: myName });
         joinRoomArea.style.display = 'none';
         gameArea.style.display = 'block';
-        statusMsgDiv.innerText = 'Подключение к комнате...';
+        statusMsgDiv.innerText = 'Присоединение...';
     }
 
-    // === СОЗДАНИЕ КОМНАТЫ ===
     createRoomBtn.onclick = () => {
         let name = playerNameInput.value.trim();
         if (!name) name = prompt('Твоё имя:');
@@ -342,10 +342,9 @@
         statusMsgDiv.innerText = 'Создание комнаты...';
     };
 
-    // === ВСТУПЛЕНИЕ В КОМНАТУ ПО КНОПКЕ "ВОЙТИ" ===
     joinRoomBtn.onclick = () => {
         if (!currentRoomId) {
-            alert('Сначала выбери комнату в левом меню');
+            alert('Сначала выбери комнату слева');
             return;
         }
         const name = playerNameInput.value.trim();
@@ -356,39 +355,32 @@
         gameArea.style.display = 'block';
     };
 
-    // === СТАРТ ИГРЫ (только создатель) ===
     startGameBtn.onclick = () => {
         if (isCreator && !gameStarted) socket.emit('start-game', currentRoomId);
     };
 
-    // === ВЫСТРЕЛ ===
     shootBtn.onclick = () => {
         if (gameStarted && myTurn) socket.emit('shoot', currentRoomId);
     };
 
-    // ========== СОКЕТЫ ==========
     socket.on('connect', () => { myId = socket.id; });
 
-    // Обновление списка комнат (при создании/подключении/выходе)
     socket.on('update-rooms', (rooms) => updateRoomsList(rooms));
 
-    // Комната создана
     socket.on('room-created', (data) => {
         currentRoomId = data.roomId;
         isCreator = true;
         myId = socket.id;
-        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} создана. Ожидай игроков, потом нажми СТАРТ.`;
+        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} готова. Ожидай игроков, потом нажми СТАРТ.`;
         startGameBtn.classList.remove('hidden');
         updatePlayersUI(data.players);
     });
 
-    // Обновление состава игроков в комнате
     socket.on('players-update', (players) => {
         currentPlayers = players;
         updatePlayersUI(players);
     });
 
-    // СТАРТ ИГРЫ (получен с сервера)
     socket.on('game-start', (data) => {
         gameStarted = true;
         currentPlayers = data.players;
@@ -402,48 +394,45 @@
         else statusMsgDiv.innerText = "⏳ Ожидаем ход другого игрока... ⏳";
     });
 
-    // Смена хода
     socket.on('turn-update', (data) => {
         if (!gameStarted) return;
         myTurn = (data.playerId === myId);
         if (myTurn) {
             enableShoot(true);
-            statusMsgDiv.innerText = "🔫 ТВОЯ ОЧЕРЕДЬ! СТРЕЛЯЙ! 🔫";
+            statusMsgDiv.innerText = "🔫 ТВОЯ ОЧЕРЕДЬ! 🔫";
         } else {
             enableShoot(false);
-            statusMsgDiv.innerText = "⌛ Ждём, когда оппонент выстрелит...";
+            statusMsgDiv.innerText = "⌛ Ждём оппонента...";
         }
         updateTurnHighlight();
     });
 
-    // Результат выстрела
     socket.on('shot-fired', (data) => {
         if (data.isDead) {
             gunIconSpan.innerHTML = "💀 💥 💀";
             if (data.playerId === myId) {
-                statusMsgDiv.innerText = "💀 ТЫ УМЕР! 💀";
+                statusMsgDiv.innerText = "💀 ТЫ ПРОИГРАЛ! 💀";
                 enableShoot(false);
-                playScreamer();   // 👈 СКРИМЕР НА ВЕСЬ ЭКРАН ПРИ ПРОИГРЫШЕ
+                playScreamer();   // СТРАШНЫЙ СКРИМЕР
             } else {
-                statusMsgDiv.innerText = "💀 ИГРОК ВЫЛЕТЕЛ! 💀";
+                statusMsgDiv.innerText = "💀 ИГРОК ВЫБЫЛ! 💀";
             }
         } else {
             gunIconSpan.innerHTML = "🔫 ЩЕЛЧОК! 🔫";
             setTimeout(() => gunIconSpan.innerHTML = "🔫 💀 🔫", 500);
-            statusMsgDiv.innerText = "🍀 Осечка... Повезло! 🍀";
+            statusMsgDiv.innerText = "🍀 Осечка... Живой! 🍀";
         }
     });
 
-    // Игрок мёртв, обновляем список
     socket.on('player-dead', (data) => {
         currentPlayers = data.playersLeft;
         updatePlayersUI(currentPlayers);
         if (data.playerId === myId) {
             gameStarted = false;
             enableShoot(false);
-            statusMsgDiv.innerText = "💀 ИГРА ЗАКОНЧЕНА. Ты проиграл. 💀";
+            statusMsgDiv.innerText = "💀 ТЫ ВЫЛЕТЕЛ. ИГРА ОКОНЧЕНА. 💀";
         } else {
-            statusMsgDiv.innerText = `☠️ В игре осталось: ${currentPlayers.length} чел. ☠️`;
+            statusMsgDiv.innerText = `☠️ Осталось: ${currentPlayers.length} чел. ☠️`;
             if (data.currentTurnId === myId) {
                 myTurn = true;
                 enableShoot(true);
@@ -453,22 +442,19 @@
         }
     });
 
-    // ИГРА ОКОНЧЕНА (победитель)
     socket.on('game-over', (data) => {
         gameStarted = false;
         enableShoot(false);
-        statusMsgDiv.innerText = data.winner ? `🏆 ПОБЕДИТЕЛЬ: ${data.winner}! 🏆` : "💀 Игра окончена. Все мертвы. 💀";
+        statusMsgDiv.innerText = data.winner ? `🏆 ПОБЕДИТЕЛЬ: ${data.winner}! 🏆` : "💀 ВСЕ МЕРТВЫ. 💀";
         startGameBtn.classList.add('hidden');
         setTimeout(() => location.reload(), 5000);
     });
 
-    // Ошибки (например, имя уже занято и т.д.)
     socket.on('error', (msg) => {
         alert(msg);
         location.reload();
     });
 
-    // === UI-ФУНКЦИИ ===
     function updatePlayersUI(players) {
         playersListDiv.innerHTML = '';
         players.forEach(p => {
@@ -476,9 +462,7 @@
             chip.className = 'player-chip';
             if (p.id === myId && p.isCreator) chip.classList.add('creator');
             chip.innerText = p.name + (p.isCreator ? ' 👑' : '');
-            if (gameStarted && window.currentTurnId === p.id) {
-                chip.classList.add('active');
-            }
+            if (gameStarted && window.currentTurnId === p.id) chip.classList.add('active');
             playersListDiv.appendChild(chip);
         });
     }
@@ -503,8 +487,7 @@
         }
     }
 
-    // Слушаем смену хода с сервера, сохраняем текущий turnId
-    const originalOn = socket.on;
+    // Сохраняем смену хода
     socket.on('turn-update', (data) => {
         window.currentTurnId = data.playerId;
         updateTurnHighlight();
