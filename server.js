@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -5,117 +6,136 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = socketIo(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-let players = [];
-let gameStarted = false;
-let currentTurn = 0;
-let chamber = 0;
-let startInitiator = null;
+let rooms = {};
 
-function initGame() {
-    if (players.length < 1) return;
-    gameStarted = true;
-    currentTurn = 0;
-    chamber = Math.floor(Math.random() * 6);
-    io.emit('game-start', {
-        players: players.map(p => p.name),
-        firstTurn: players[0].id
-    });
-    io.emit('turn-update', { playerId: players[0].id });
-}
-
-function nextTurn() {
-    if (!gameStarted) return;
-    currentTurn = (currentTurn + 1) % players.length;
-    io.emit('turn-update', { playerId: players[currentTurn].id });
-}
-
-function shoot(playerId) {
-    const player = players.find(p => p.id === playerId);
-    if (!player || !gameStarted || players[currentTurn].id !== playerId) return false;
-
-    const isDead = chamber === 0;
-    io.emit('shot-fired', { playerId, isDead });
-
-    if (isDead) {
-        players = players.filter(p => p.id !== playerId);
-        io.emit('player-dead', { playerId, playersLeft: players.map(p => p.name) });
-
-        if (players.length <= 1) {
-            const winner = players.length === 1 ? players[0].name : null;
-            io.emit('game-over', { winner });
-            gameStarted = false;
-            startInitiator = null;
-            return true;
-        }
-        if (currentTurn >= players.length) currentTurn = 0;
-        io.emit('turn-update', { playerId: players[currentTurn].id });
-        chamber = Math.floor(Math.random() * 6);
-        return true;
-    } else {
-        chamber = (chamber + 1) % 6;
-        nextTurn();
-        return true;
-    }
+function generateRoomId() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 io.on('connection', (socket) => {
-    console.log('Player connected:', socket.id);
+    console.log('User connected:', socket.id);
 
-    socket.on('join-game', (name) => {
-        if (gameStarted) {
+    socket.on('create-room', (playerName) => {
+        const roomId = generateRoomId();
+        rooms[roomId] = {
+            id: roomId,
+            players: [{ id: socket.id, name: playerName, isCreator: true }],
+            gameStarted: false,
+            currentTurn: 0,
+            chamber: 0
+        };
+        socket.join(roomId);
+        socket.emit('room-created', { roomId, players: rooms[roomId].players });
+        io.emit('update-rooms', getRoomsList());
+    });
+
+    socket.on('join-room', ({ roomId, playerName }) => {
+        const room = rooms[roomId];
+        if (!room) {
+            socket.emit('error', 'Room not found');
+            return;
+        }
+        if (room.gameStarted) {
             socket.emit('error', 'Game already started');
             return;
         }
-        if (players.length >= 6) {
-            socket.emit('error', 'Game is full');
+        if (room.players.length >= 6) {
+            socket.emit('error', 'Room is full');
             return;
         }
-        if (players.some(p => p.name === name)) {
-            socket.emit('error', 'Name already taken');
-            return;
-        }
-        players.push({ id: socket.id, name: name.slice(0, 20) });
-        socket.emit('joined-success', { playerName: name });
-        io.emit('players-update', { players: players.map(p => p.name) });
-        console.log('Players:', players.map(p => p.name));
-
-        if (players.length === 1) {
-            socket.emit('can-start', true);
-        }
+        room.players.push({ id: socket.id, name: playerName, isCreator: false });
+        socket.join(roomId);
+        io.to(roomId).emit('players-update', room.players);
+        io.emit('update-rooms', getRoomsList());
     });
 
-    socket.on('start-game', () => {
-        if (gameStarted) return;
-        if (players.length < 1) {
-            socket.emit('error', 'Need at least 1 player');
+    socket.on('start-game', (roomId) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isCreator) {
+            socket.emit('error', 'Only room creator can start the game');
             return;
         }
-        initGame();
+        if (room.gameStarted) return;
+        if (room.players.length < 1) return;
+        
+        room.gameStarted = true;
+        room.currentTurn = 0;
+        room.chamber = Math.floor(Math.random() * 6);
+        
+        io.to(roomId).emit('game-start', {
+            players: room.players.map(p => p.name),
+            firstTurn: room.players[0].id
+        });
+        io.to(roomId).emit('turn-update', { playerId: room.players[0].id });
     });
 
-    socket.on('shoot', () => {
-        shoot(socket.id);
+    socket.on('shoot', (roomId) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameStarted) return;
+        if (room.players[room.currentTurn].id !== socket.id) return;
+        
+        const isDead = room.chamber === 0;
+        io.to(roomId).emit('shot-fired', { playerId: socket.id, isDead });
+        
+        if (isDead) {
+            const deadIndex = room.players.findIndex(p => p.id === socket.id);
+            room.players.splice(deadIndex, 1);
+            io.to(roomId).emit('player-dead', { 
+                playerId: socket.id, 
+                playersLeft: room.players.map(p => p.name),
+                isCreator: room.players.length > 0 ? room.players[0].isCreator : false
+            });
+            
+            if (room.players.length <= 1) {
+                const winner = room.players.length === 1 ? room.players[0].name : null;
+                io.to(roomId).emit('game-over', { winner });
+                delete rooms[roomId];
+                io.emit('update-rooms', getRoomsList());
+                return;
+            }
+            if (room.currentTurn >= room.players.length) room.currentTurn = 0;
+            io.to(roomId).emit('turn-update', { playerId: room.players[room.currentTurn].id });
+            room.chamber = Math.floor(Math.random() * 6);
+        } else {
+            room.chamber = (room.chamber + 1) % 6;
+            room.currentTurn = (room.currentTurn + 1) % room.players.length;
+            io.to(roomId).emit('turn-update', { playerId: room.players[room.currentTurn].id });
+        }
     });
 
     socket.on('disconnect', () => {
-        console.log('Player disconnected:', socket.id);
-        players = players.filter(p => p.id !== socket.id);
-        io.emit('players-update', { players: players.map(p => p.name) });
-        if (gameStarted && players.length < 2) {
-            io.emit('game-over', { winner: players.length ? players[0].name : null });
-            gameStarted = false;
-            startInitiator = null;
+        for (let roomId in rooms) {
+            const room = rooms[roomId];
+            const playerIndex = room.players.findIndex(p => p.id === socket.id);
+            if (playerIndex !== -1) {
+                room.players.splice(playerIndex, 1);
+                io.to(roomId).emit('players-update', room.players);
+                if (room.players.length === 0) {
+                    delete rooms[roomId];
+                } else if (room.gameStarted && room.players.length < 2) {
+                    io.to(roomId).emit('game-over', { winner: room.players.length ? room.players[0].name : null });
+                    delete rooms[roomId];
+                }
+                io.emit('update-rooms', getRoomsList());
+                break;
+            }
         }
     });
 });
 
+function getRoomsList() {
+    return Object.values(rooms).map(room => ({
+        id: room.id,
+        playerCount: room.players.length,
+        inGame: room.gameStarted
+    }));
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, '0.0.0.0', () => console.log(`Server on port ${PORT}`));
