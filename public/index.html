@@ -1,4 +1,3 @@
-<!-- public/index.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -83,8 +82,16 @@
             color: #f0cba0;
             font-weight: bold;
             border-left: 6px solid #d49152;
+            transition: all 0.2s;
         }
-        .player-chip.active { background: #8b4513; border-left-color: gold; box-shadow: 0 0 12px #ffa559; }
+        .player-chip.active { 
+            background: #8b4513; 
+            border-left-color: gold; 
+            box-shadow: 0 0 12px #ffa559;
+            color: #ffefb9;
+            transform: scale(1.05);
+        }
+        .player-chip.creator { border-right: 3px solid gold; }
         .status-message {
             background: #000000aa;
             backdrop-filter: blur(8px);
@@ -94,6 +101,7 @@
             font-size: 22px;
             color: #fadfaa;
             margin: 15px 0;
+            font-weight: bold;
         }
         .gun { text-align: center; font-size: 70px; letter-spacing: 16px; background: #362217; border-radius: 80px; padding: 15px; margin: 10px 0; }
         .shoot-btn {
@@ -111,6 +119,14 @@
         }
         .shoot-btn.disabled { background: #5f4a3b; opacity: 0.6; cursor: not-allowed; }
         .hidden { display: none; }
+        .turn-indicator {
+            background: #000000cc;
+            padding: 8px 15px;
+            border-radius: 40px;
+            display: inline-block;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
@@ -137,9 +153,11 @@
     const socket = io();
     let currentRoomId = null;
     let myName = null;
+    let myId = null;
     let isCreator = false;
     let gameStarted = false;
     let myTurn = false;
+    let currentPlayers = [];
 
     const roomListDiv = document.getElementById('roomList');
     const createRoomBtn = document.getElementById('createRoomBtn');
@@ -169,6 +187,7 @@
             const name = prompt('Enter your name:');
             if (!name) return;
             myName = name;
+            playerNameInput.value = myName;
         }
         currentRoomId = roomId;
         socket.emit('join-room', { roomId, playerName: myName });
@@ -203,72 +222,142 @@
     startGameBtn.onclick = () => { if (isCreator && !gameStarted) socket.emit('start-game', currentRoomId); };
     shootBtn.onclick = () => { if (gameStarted && myTurn) socket.emit('shoot', currentRoomId); };
 
+    socket.on('connect', () => { myId = socket.id; });
+    
     socket.on('update-rooms', (rooms) => updateRoomsList(rooms));
+    
     socket.on('room-created', (data) => {
         currentRoomId = data.roomId;
         isCreator = true;
+        myId = socket.id;
         statusMsgDiv.innerText = `Room ${currentRoomId} created. Wait for players, then press START.`;
         startGameBtn.classList.remove('hidden');
         updatePlayersUI(data.players);
     });
-    socket.on('players-update', (players) => updatePlayersUI(players));
+    
+    socket.on('players-update', (players) => {
+        currentPlayers = players;
+        updatePlayersUI(players);
+    });
+    
     socket.on('game-start', (data) => {
         gameStarted = true;
-        myTurn = (data.firstTurn === socket.id);
-        statusMsgDiv.innerText = `GAME STARTED! First turn: ${myTurn ? 'YOU' : 'wait...'}`;
+        currentPlayers = data.players;
+        updatePlayersUI(currentPlayers);
+        myTurn = (data.firstPlayerId === myId);
         if (myTurn) enableShoot(true);
         else enableShoot(false);
         startGameBtn.classList.add('hidden');
+        updateTurnHighlight();
+        if (myTurn) statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
+        else statusMsgDiv.innerText = "⏳ Waiting for other player... ⏳";
     });
+    
     socket.on('turn-update', (data) => {
         if (!gameStarted) return;
-        myTurn = (data.playerId === socket.id);
-        if (myTurn) { enableShoot(true); statusMsgDiv.innerText = "YOUR TURN! Pull the trigger..."; }
-        else { enableShoot(false); statusMsgDiv.innerText = "Waiting for opponent..."; }
+        myTurn = (data.playerId === myId);
+        if (myTurn) { 
+            enableShoot(true); 
+            statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
+        } else { 
+            enableShoot(false); 
+            statusMsgDiv.innerText = "⏳ Waiting for opponent... ⏳";
+        }
+        updateTurnHighlight();
     });
+    
     socket.on('shot-fired', (data) => {
         if (data.isDead) {
             gunIconSpan.innerHTML = "💀 💥 💀";
-            if (data.playerId === socket.id) { statusMsgDiv.innerText = "YOU DIED!"; enableShoot(false); }
-            else statusMsgDiv.innerText = "A player died!";
-        } else { gunIconSpan.innerHTML = "🔫 CLICK! 🔫"; setTimeout(() => gunIconSpan.innerHTML = "🔫 💀 🔫", 500); }
+            if (data.playerId === myId) { 
+                statusMsgDiv.innerText = "💀 YOU DIED! 💀"; 
+                enableShoot(false);
+            } else { 
+                statusMsgDiv.innerText = "💀 A player was eliminated! 💀";
+            }
+        } else { 
+            gunIconSpan.innerHTML = "🔫 CLICK! 🔫"; 
+            setTimeout(() => gunIconSpan.innerHTML = "🔫 💀 🔫", 500);
+            statusMsgDiv.innerText = "🍀 CLICK... Lucky! 🍀";
+        }
     });
+    
     socket.on('player-dead', (data) => {
-        updatePlayersUIByName(data.playersLeft);
-        if (data.playerId === socket.id) { gameStarted = false; enableShoot(false); statusMsgDiv.innerText = "Game over. You lost."; }
-        else statusMsgDiv.innerText = `${data.playersLeft.length} players remain.`;
+        currentPlayers = data.playersLeft;
+        updatePlayersUI(currentPlayers);
+        if (data.playerId === myId) { 
+            gameStarted = false; 
+            enableShoot(false); 
+            statusMsgDiv.innerText = "💀 Game over. You lost. 💀";
+        } else { 
+            statusMsgDiv.innerText = `☠️ ${currentPlayers.length} players remain. ☠️`;
+            if (data.currentTurnId === myId) {
+                myTurn = true;
+                enableShoot(true);
+                statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
+            }
+            updateTurnHighlight();
+        }
     });
+    
     socket.on('game-over', (data) => {
         gameStarted = false;
         enableShoot(false);
-        statusMsgDiv.innerText = data.winner ? `WINNER: ${data.winner}!` : "Game over!";
+        statusMsgDiv.innerText = data.winner ? `🏆 WINNER: ${data.winner}! 🏆` : "💀 Game over! No survivors. 💀";
         startGameBtn.classList.add('hidden');
-        setTimeout(() => location.reload(), 4000);
+        setTimeout(() => location.reload(), 5000);
     });
+    
     socket.on('error', (msg) => { alert(msg); location.reload(); });
 
     function updatePlayersUI(players) {
         playersListDiv.innerHTML = '';
         players.forEach(p => {
             const chip = document.createElement('div');
-            chip.className = 'player-chip' + (p.id === socket.id && gameStarted && myTurn ? ' active' : '');
-            chip.innerText = p.name + (p.isCreator ? ' 👑' : '');
-            playersListDiv.appendChild(chip);
-        });
-    }
-    function updatePlayersUIByName(names) {
-        playersListDiv.innerHTML = '';
-        names.forEach(name => {
-            const chip = document.createElement('div');
             chip.className = 'player-chip';
-            chip.innerText = name;
+            if (p.id === myId && p.isCreator) chip.classList.add('creator');
+            chip.innerText = p.name + (p.isCreator ? ' 👑' : '');
+            if (gameStarted && p.id === players[currentTurnIndex()]?.id) {
+                chip.classList.add('active');
+            }
             playersListDiv.appendChild(chip);
         });
     }
-    function enableShoot(enabled) {
-        if (enabled) { shootBtn.classList.remove('disabled'); shootBtn.disabled = false; }
-        else { shootBtn.classList.add('disabled'); shootBtn.disabled = true; }
+    
+    function currentTurnIndex() {
+        if (!gameStarted || !currentPlayers.length) return -1;
+        return currentPlayers.findIndex(p => p.id === (window.currentTurnId || (myTurn ? myId : null)));
     }
+    
+    function updateTurnHighlight() {
+        const chips = document.querySelectorAll('.player-chip');
+        chips.forEach((chip, idx) => {
+            chip.classList.remove('active');
+            if (gameStarted && currentPlayers[idx] && currentPlayers[idx].id === (window.currentTurnId || (myTurn && gameStarted ? myId : null))) {
+                chip.classList.add('active');
+            }
+        });
+    }
+    
+    function enableShoot(enabled) {
+        if (enabled) { 
+            shootBtn.classList.remove('disabled'); 
+            shootBtn.disabled = false; 
+        } else { 
+            shootBtn.classList.add('disabled'); 
+            shootBtn.disabled = true; 
+        }
+    }
+    
+    window.updateTurnHighlight = updateTurnHighlight;
+    window.currentTurnId = null;
+    
+    // Listen for turn updates to store current turn ID
+    const originalTurnUpdate = socket.on;
+    socket.on('turn-update', (data) => {
+        window.currentTurnId = data.playerId;
+        updateTurnHighlight();
+    });
 </script>
 </body>
 </html>

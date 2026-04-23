@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -47,6 +46,10 @@ io.on('connection', (socket) => {
             socket.emit('error', 'Room is full');
             return;
         }
+        if (room.players.some(p => p.name === playerName)) {
+            socket.emit('error', 'Name already taken in this room');
+            return;
+        }
         room.players.push({ id: socket.id, name: playerName, isCreator: false });
         socket.join(roomId);
         io.to(roomId).emit('players-update', room.players);
@@ -69,10 +72,9 @@ io.on('connection', (socket) => {
         room.chamber = Math.floor(Math.random() * 6);
         
         io.to(roomId).emit('game-start', {
-            players: room.players.map(p => p.name),
-            firstTurn: room.players[0].id
+            players: room.players.map(p => ({ id: p.id, name: p.name })),
+            firstPlayerId: room.players[0].id
         });
-        io.to(roomId).emit('turn-update', { playerId: room.players[0].id });
     });
 
     socket.on('shoot', (roomId) => {
@@ -88,8 +90,8 @@ io.on('connection', (socket) => {
             room.players.splice(deadIndex, 1);
             io.to(roomId).emit('player-dead', { 
                 playerId: socket.id, 
-                playersLeft: room.players.map(p => p.name),
-                isCreator: room.players.length > 0 ? room.players[0].isCreator : false
+                playersLeft: room.players.map(p => ({ id: p.id, name: p.name })),
+                currentTurnId: room.players.length > 0 ? room.players[room.currentTurn >= room.players.length ? 0 : room.currentTurn].id : null
             });
             
             if (room.players.length <= 1) {
@@ -121,6 +123,9 @@ io.on('connection', (socket) => {
                 } else if (room.gameStarted && room.players.length < 2) {
                     io.to(roomId).emit('game-over', { winner: room.players.length ? room.players[0].name : null });
                     delete rooms[roomId];
+                } else if (room.gameStarted && room.currentTurn >= room.players.length) {
+                    room.currentTurn = 0;
+                    io.to(roomId).emit('turn-update', { playerId: room.players[0].id });
                 }
                 io.emit('update-rooms', getRoomsList());
                 break;
