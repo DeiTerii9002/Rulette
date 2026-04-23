@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Russian Roulette · Multiplayer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background: linear-gradient(145deg, #1a3c2c 0%, #0e2a1f 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', 'Segoe UI', monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        .game-container {
+            background: #2d221c;
+            border-radius: 70px;
+            box-shadow: 0 30px 35px rgba(0,0,0,0.5), inset 0 2px 5px rgba(255,255,200,0.2);
+            padding: 30px 25px;
+            max-width: 800px;
+            width: 100%;
+            border: 1px solid #b87a4f;
+        }
+        .title {
+            text-align: center;
+            font-size: 38px;
+            font-weight: bold;
+            color: #f5e2b9;
+            text-shadow: 4px 4px 0 #7a2e1a;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+        .join-area {
+            background: #1e1713;
+            border-radius: 50px;
+            padding: 25px;
+            margin-bottom: 25px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            border: 1px solid #bb8855;
+        }
+        .join-input {
+            flex: 2;
+            min-width: 160px;
+            background: #2e241f;
+            border: 2px solid #c9864b;
+            padding: 12px 18px;
+            border-radius: 60px;
+            font-size: 18px;
+            color: #ffefcf;
+            font-weight: bold;
+            outline: none;
+            text-align: center;
+        }
+        .join-btn {
+            background: #b3592c;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 18px;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 5px 0 #5e2a12;
+        }
+        .join-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #5e2a12;
+        }
+        .game-panel {
+            background: #2b211b;
+            border-radius: 45px;
+            padding: 18px;
+            margin-bottom: 25px;
+        }
+        .players-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin: 15px 0;
+        }
+        .player-chip {
+            background: #45342b;
+            padding: 10px 18px;
+            border-radius: 50px;
+            color: #f0cba0;
+            font-weight: bold;
+            font-size: 18px;
+            border-left: 6px solid #d49152;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .player-chip.active {
+            background: #8b4513;
+            color: #ffefb9;
+            border-left-color: gold;
+            text-shadow: 0 0 4px rgb(255,215,0);
+            box-shadow: 0 0 12px #ffa559;
+        }
+        .status-message {
+            background: #000000aa;
+            backdrop-filter: blur(8px);
+            border-radius: 46px;
+            padding: 20px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: #fadfaa;
+            margin: 15px 0;
+        }
+        .gun {
+            text-align: center;
+            font-size: 70px;
+            letter-spacing: 16px;
+            background: #362217;
+            border-radius: 80px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .shoot-btn {
+            background: #ac3e1c;
+            width: 80%;
+            padding: 18px;
+            font-size: 28px;
+            font-weight: bold;
+            border: none;
+            border-radius: 60px;
+            color: white;
+            cursor: pointer;
+            margin: 20px auto;
+            display: block;
+            transition: 0.1s linear;
+            box-shadow: 0 10px 0 #4f2a16;
+        }
+        .shoot-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 5px 0 #4f2a16;
+        }
+        .shoot-btn.disabled {
+            background: #5f4a3b;
+            box-shadow: none;
+            opacity: 0.6;
+            transform: none;
+            cursor: not-allowed;
+        }
+        .footer {
+            font-size: 12px;
+            text-align: center;
+            color: #be8a62;
+        }
+        button {
+            font-family: monospace;
+        }
+        @media (max-width: 550px) {
+            .title { font-size: 28px; }
+            .player-chip { font-size: 14px; padding: 6px 12px; }
+            .shoot-btn { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div class="title">🔫 ROULETTE · REVOLVER</div>
+
+    <div class="join-area">
+        <input type="text" id="playerName" class="join-input" placeholder="your name" maxlength="20">
+        <button id="joinBtn" class="join-btn">🔫 JOIN GAME</button>
+    </div>
+
+    <div class="game-panel">
+        <div class="players-list" id="playersList"></div>
+
+        <div class="status-message" id="statusMsg">
+            👥 Join the game. Min 1 / Max 6 players
+        </div>
+
+        <div class="gun" id="gunIcon">
+            🔫  💀  🔫
+        </div>
+
+        <button id="startGameBtn" class="join-btn" style="background:#4e3c2e; margin-bottom:20px;">⚔️ START GAME ⚔️</button>
+        <button id="shootBtn" class="shoot-btn disabled" disabled> 🔫 PULL TRIGGER 🔫</button>
+    </div>
+    <div class="footer">
+        • each turn you pull the trigger • 1/6 chance to die • last survivor wins •
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    let myId = null;
+    let playersInGame = [];
+    let gameStartedFlag = false;
+    let myTurn = false;
+    let myName = null;
+
+    const playersListDiv = document.getElementById('playersList');
+    const statusMsgDiv = document.getElementById('statusMsg');
+    const shootBtn = document.getElementById('shootBtn');
+    const startBtn = document.getElementById('startGameBtn');
+    const joinBtn = document.getElementById('joinBtn');
+    const playerNameInput = document.getElementById('playerName');
+    const gunIconSpan = document.getElementById('gunIcon');
+
+    function updatePlayersUI(playersArray) {
+        playersListDiv.innerHTML = '';
+        playersArray.forEach(p => {
+            const chip = document.createElement('div');
+            chip.classList.add('player-chip');
+            chip.innerText = p;
+            playersListDiv.appendChild(chip);
+        });
+        if (gameStartedFlag && myTurn && myName) {
+            document.querySelectorAll('.player-chip').forEach(chip => {
+                if (chip.innerText === myName) chip.classList.add('active');
+                else chip.classList.remove('active');
+            });
+        } else {
+            document.querySelectorAll('.player-chip').forEach(ch => ch.classList.remove('active'));
+        }
+    }
+
+    joinBtn.onclick = () => {
+        let name = playerNameInput.value.trim();
+        if (name === "") name = "GUNSLINGER";
+        myName = name.slice(0, 20);
+        socket.emit('join-game', myName);
+    };
+
+    startBtn.onclick = () => {
+        if (!myName) {
+            statusMsgDiv.innerText = "⚠️ Join game first! ⚠️";
+            return;
+        }
+        socket.emit('start-game');
+    };
+
+    shootBtn.onclick = () => {
+        if (!gameStartedFlag || !myTurn) {
+            statusMsgDiv.innerText = "❌ Not your turn! Wait... ❌";
+            return;
+        }
+        socket.emit('shoot');
+    };
+
+    socket.on('connect', () => {
+        myId = socket.id;
+        statusMsgDiv.innerText = "✅ Connected. Enter name and JOIN.";
+    });
+
+    socket.on('players-update', (data) => {
+        playersInGame = data.players;
+        updatePlayersUI(playersInGame);
+        if (!gameStartedFlag) {
+            if (playersInGame.length > 0) {
+                statusMsgDiv.innerHTML = `👥 ${playersInGame.length} player(s) ready. Press START GAME.`;
+            } else {
+                statusMsgDiv.innerHTML = `👥 Join the game. Min 1 / Max 6 players`;
+            }
+        }
+    });
+
+    socket.on('game-start', (data) => {
+        gameStartedFlag = true;
+        playersInGame = data.players;
+        updatePlayersUI(playersInGame);
+        myTurn = (data.firstTurn === myId);
+        statusMsgDiv.innerHTML = `🔫 GAME STARTED! First turn: ${myTurn ? 'YOU' : 'wait...'}`;
+        if (myTurn) {
+            shootBtn.classList.remove('disabled');
+            shootBtn.disabled = false;
+            statusMsgDiv.innerHTML = "💥 IT'S YOUR TURN! Pull the trigger... 💥";
+        } else {
+            shootBtn.classList.add('disabled');
+            shootBtn.disabled = true;
+        }
+        gunIconSpan.innerHTML = "💀  🔫  💀";
+    });
+
+    socket.on('turn-update', (data) => {
+        if (!gameStartedFlag) return;
+        myTurn = (data.playerId === myId);
+        if (myTurn) {
+            shootBtn.classList.remove('disabled');
+            shootBtn.disabled = false;
+            statusMsgDiv.innerHTML = "🔥 YOUR TURN! Pull the trigger... 🔥";
+            if (myName) {
+                document.querySelectorAll('.player-chip').forEach(chip => {
+                    chip.classList.toggle('active', chip.innerText === myName);
+                });
+            }
+        } else {
+            shootBtn.classList.add('disabled');
+            shootBtn.disabled = true;
+            statusMsgDiv.innerHTML = `⏳ Waiting for opponent...`;
+        }
+    });
+
+    socket.on('shot-fired', (data) => {
+        if (data.isDead) {
+            gunIconSpan.innerHTML = "💀  💥  💀";
+            if (data.playerId === myId) {
+                statusMsgDiv.innerHTML = "😵 YOU DIED! 😵";
+                shootBtn.classList.add('disabled');
+                shootBtn.disabled = true;
+                myTurn = false;
+            } else {
+                statusMsgDiv.innerHTML = `⚰️ A player has been eliminated ⚰️`;
+            }
+        } else {
+            gunIconSpan.innerHTML = "🔫  CLICK!  🔫";
+            setTimeout(() => { gunIconSpan.innerHTML = "🔫  💀  🔫"; }, 500);
+            statusMsgDiv.innerHTML = "🍀 CLICK... Lucky! Passing turn... 🍀";
+        }
+    });
+
+    socket.on('player-dead', (data) => {
+        playersInGame = data.playersLeft;
+        updatePlayersUI(playersInGame);
+        if (data.playerId === myId) {
+            gameStartedFlag = false;
+            myTurn = false;
+            shootBtn.classList.add('disabled');
+            shootBtn.disabled = true;
+            statusMsgDiv.innerHTML = "💀 Game over. You lost. 💀";
+        } else {
+            statusMsgDiv.innerHTML = `☠️ A player died. ${playersInGame.length} remain. ☠️`;
+        }
+    });
+
+    socket.on('game-over', (data) => {
+        gameStartedFlag = false;
+        myTurn = false;
+        shootBtn.classList.add('disabled');
+        shootBtn.disabled = true;
+        if (data.winner) {
+            statusMsgDiv.innerHTML = `🏆 GAME OVER! WINNER: ${data.winner} 🏆`;
+        } else {
+            statusMsgDiv.innerHTML = `💀 GAME OVER. No survivors. 💀`;
+        }
+        playersInGame = [];
+        updatePlayersUI([]);
+    });
+
+    socket.on('error', (msg) => {
+        statusMsgDiv.innerHTML = `⚠️ ${msg} ⚠️`;
+        setTimeout(() => {
+            if (!gameStartedFlag) statusMsgDiv.innerHTML = "👥 Join game to play.";
+        }, 3000);
+    });
+</script>
+</body>
+</html>
