@@ -47,6 +47,10 @@
             flex-wrap: wrap;
             justify-content: center;
             border: 1px solid #bb8855;
+            transition: all 0.2s;
+        }
+        .join-area.hidden {
+            display: none;
         }
         .join-input {
             flex: 2;
@@ -153,6 +157,11 @@
             transform: none;
             cursor: not-allowed;
         }
+        .start-btn {
+            background: #4e3c2e;
+            margin-bottom: 20px;
+            width: 100%;
+        }
         .footer {
             font-size: 12px;
             text-align: center;
@@ -172,7 +181,7 @@
 <div class="game-container">
     <div class="title">🔫 ROULETTE · REVOLVER</div>
 
-    <div class="join-area">
+    <div class="join-area" id="joinArea">
         <input type="text" id="playerName" class="join-input" placeholder="your name" maxlength="20">
         <button id="joinBtn" class="join-btn">🔫 JOIN GAME</button>
     </div>
@@ -188,7 +197,7 @@
             🔫  💀  🔫
         </div>
 
-        <button id="startGameBtn" class="join-btn" style="background:#4e3c2e; margin-bottom:20px;">⚔️ START GAME ⚔️</button>
+        <button id="startGameBtn" class="join-btn start-btn" style="background:#4e3c2e;">⚔️ START GAME ⚔️</button>
         <button id="shootBtn" class="shoot-btn disabled" disabled> 🔫 PULL TRIGGER 🔫</button>
     </div>
     <div class="footer">
@@ -204,7 +213,9 @@
     let gameStartedFlag = false;
     let myTurn = false;
     let myName = null;
+    let alreadyJoined = false;
 
+    const joinArea = document.getElementById('joinArea');
     const playersListDiv = document.getElementById('playersList');
     const statusMsgDiv = document.getElementById('statusMsg');
     const shootBtn = document.getElementById('shootBtn');
@@ -232,6 +243,7 @@
     }
 
     joinBtn.onclick = () => {
+        if (alreadyJoined) return;
         let name = playerNameInput.value.trim();
         if (name === "") name = "GUNSLINGER";
         myName = name.slice(0, 20);
@@ -259,12 +271,25 @@
         statusMsgDiv.innerText = "✅ Connected. Enter name and JOIN.";
     });
 
+    socket.on('joined-success', (data) => {
+        alreadyJoined = true;
+        joinArea.classList.add('hidden');
+        statusMsgDiv.innerText = `✅ Joined as ${data.playerName}. Wait for START.`;
+        myName = data.playerName;
+    });
+
+    socket.on('can-start', () => {
+        startBtn.style.background = "#b3592c";
+        statusMsgDiv.innerText = "👉 You are the first player. Press START when ready! 👈";
+    });
+
     socket.on('players-update', (data) => {
         playersInGame = data.players;
         updatePlayersUI(playersInGame);
         if (!gameStartedFlag) {
             if (playersInGame.length > 0) {
-                statusMsgDiv.innerHTML = `👥 ${playersInGame.length} player(s) ready. Press START GAME.`;
+                if (!alreadyJoined) statusMsgDiv.innerHTML = `👥 ${playersInGame.length} player(s) ready. Join and then press START.`;
+                else statusMsgDiv.innerHTML = `👥 ${playersInGame.length} player(s) ready. Press START to begin.`;
             } else {
                 statusMsgDiv.innerHTML = `👥 Join the game. Min 1 / Max 6 players`;
             }
@@ -315,6 +340,9 @@
                 shootBtn.classList.add('disabled');
                 shootBtn.disabled = true;
                 myTurn = false;
+                joinArea.classList.remove('hidden');
+                alreadyJoined = false;
+                playerNameInput.value = '';
             } else {
                 statusMsgDiv.innerHTML = `⚰️ A player has been eliminated ⚰️`;
             }
@@ -344,6 +372,7 @@
         myTurn = false;
         shootBtn.classList.add('disabled');
         shootBtn.disabled = true;
+        startBtn.style.background = "#4e3c2e";
         if (data.winner) {
             statusMsgDiv.innerHTML = `🏆 GAME OVER! WINNER: ${data.winner} 🏆`;
         } else {
@@ -351,12 +380,15 @@
         }
         playersInGame = [];
         updatePlayersUI([]);
+        setTimeout(() => {
+            window.location.reload();
+        }, 4000);
     });
 
     socket.on('error', (msg) => {
         statusMsgDiv.innerHTML = `⚠️ ${msg} ⚠️`;
         setTimeout(() => {
-            if (!gameStartedFlag) statusMsgDiv.innerHTML = "👥 Join game to play.";
+            if (!gameStartedFlag && !alreadyJoined) statusMsgDiv.innerHTML = "👥 Join game to play.";
         }, 3000);
     });
 </script>

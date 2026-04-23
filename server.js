@@ -6,10 +6,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -18,12 +15,17 @@ let players = [];
 let gameStarted = false;
 let currentTurn = 0;
 let chamber = 0;
+let startInitiator = null;
 
 function initGame() {
+    if (players.length < 1) return;
     gameStarted = true;
     currentTurn = 0;
     chamber = Math.floor(Math.random() * 6);
-    io.emit('game-start', { players: players.map(p => p.name), firstTurn: players[0].id });
+    io.emit('game-start', {
+        players: players.map(p => p.name),
+        firstTurn: players[0].id
+    });
     io.emit('turn-update', { playerId: players[0].id });
 }
 
@@ -45,12 +47,10 @@ function shoot(playerId) {
         io.emit('player-dead', { playerId, playersLeft: players.map(p => p.name) });
 
         if (players.length <= 1) {
-            if (players.length === 1) {
-                io.emit('game-over', { winner: players[0].name });
-            } else {
-                io.emit('game-over', { winner: null });
-            }
+            const winner = players.length === 1 ? players[0].name : null;
+            io.emit('game-over', { winner });
             gameStarted = false;
+            startInitiator = null;
             return true;
         }
         if (currentTurn >= players.length) currentTurn = 0;
@@ -81,8 +81,13 @@ io.on('connection', (socket) => {
             return;
         }
         players.push({ id: socket.id, name: name.slice(0, 20) });
+        socket.emit('joined-success', { playerName: name });
         io.emit('players-update', { players: players.map(p => p.name) });
         console.log('Players:', players.map(p => p.name));
+
+        if (players.length === 1) {
+            socket.emit('can-start', true);
+        }
     });
 
     socket.on('start-game', () => {
@@ -105,6 +110,7 @@ io.on('connection', (socket) => {
         if (gameStarted && players.length < 2) {
             io.emit('game-over', { winner: players.length ? players[0].name : null });
             gameStarted = false;
+            startInitiator = null;
         }
     });
 });
