@@ -1,20 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Russian Roulette</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Russian Roulette · Rooms + Screamer</title>
     <style>
-        * { box-sizing: border-box; user-select: none; }
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
         body {
-            background: linear-gradient(145deg, #1a3c2c, #0e2a1f);
-            font-family: 'Courier New', monospace;
+            background: linear-gradient(145deg, #1a3c2c 0%, #0e2a1f 100%);
+            font-family: 'Courier New', 'Segoe UI', monospace;
             margin: 0;
             padding: 20px;
             min-height: 100vh;
             display: flex;
             gap: 20px;
         }
+
+        /* ЛЕВАЯ ПАНЕЛЬ — СПИСОК КОМНАТ */
         .rooms-panel {
             width: 280px;
             background: #2d221c;
@@ -22,9 +28,23 @@
             padding: 20px;
             border: 1px solid #b87a4f;
             height: fit-content;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
         }
-        .rooms-panel h3 { color: #f5e2b9; text-align: center; margin: 0 0 15px; }
-        .room-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .rooms-panel h3 {
+            color: #f5e2b9;
+            text-align: center;
+            margin: 0 0 15px;
+        }
+
+        .room-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
         .room-item {
             background: #1e1713;
             padding: 10px 15px;
@@ -33,9 +53,22 @@
             color: #f0cba0;
             border: 1px solid #bb8855;
             transition: 0.2s;
+            display: flex;
+            justify-content: space-between;
         }
-        .room-item:hover { background: #b3592c; color: white; transform: scale(1.02); }
-        .room-item.in-game { opacity: 0.6; cursor: not-allowed; background: #5f4a3b; }
+
+        .room-item:hover {
+            background: #b3592c;
+            color: white;
+            transform: scale(1.02);
+        }
+
+        .room-item.in-game {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #5f4a3b;
+        }
+
         .create-btn {
             width: 100%;
             background: #b3592c;
@@ -46,7 +79,10 @@
             font-weight: bold;
             margin-top: 15px;
             cursor: pointer;
+            font-size: 16px;
         }
+
+        /* ОСНОВНАЯ ИГРОВАЯ ОБЛАСТЬ */
         .game-container {
             flex: 1;
             background: #2d221c;
@@ -54,7 +90,12 @@
             padding: 30px 25px;
             border: 1px solid #b87a4f;
         }
-        .join-area { text-align: center; margin-bottom: 20px; }
+
+        .join-area {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
         .join-input {
             background: #2e241f;
             border: 2px solid #c9864b;
@@ -65,6 +106,7 @@
             margin-right: 10px;
             width: 200px;
         }
+
         .join-btn, .start-btn {
             background: #b3592c;
             border: none;
@@ -74,7 +116,15 @@
             color: white;
             cursor: pointer;
         }
-        .players-list { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 15px 0; }
+
+        .players-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin: 15px 0;
+        }
+
         .player-chip {
             background: #45342b;
             padding: 10px 18px;
@@ -82,16 +132,21 @@
             color: #f0cba0;
             font-weight: bold;
             border-left: 6px solid #d49152;
-            transition: all 0.2s;
+            transition: 0.2s;
         }
-        .player-chip.active { 
-            background: #8b4513; 
-            border-left-color: gold; 
+
+        .player-chip.active {
+            background: #8b4513;
+            border-left-color: gold;
             box-shadow: 0 0 12px #ffa559;
             color: #ffefb9;
             transform: scale(1.05);
         }
-        .player-chip.creator { border-right: 3px solid gold; }
+
+        .player-chip.creator {
+            border-right: 3px solid gold;
+        }
+
         .status-message {
             background: #000000aa;
             backdrop-filter: blur(8px);
@@ -103,7 +158,17 @@
             margin: 15px 0;
             font-weight: bold;
         }
-        .gun { text-align: center; font-size: 70px; letter-spacing: 16px; background: #362217; border-radius: 80px; padding: 15px; margin: 10px 0; }
+
+        .gun {
+            text-align: center;
+            font-size: 70px;
+            letter-spacing: 16px;
+            background: #362217;
+            border-radius: 80px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
         .shoot-btn {
             background: #ac3e1c;
             width: 80%;
@@ -117,38 +182,87 @@
             display: block;
             margin: 20px auto;
         }
-        .shoot-btn.disabled { background: #5f4a3b; opacity: 0.6; cursor: not-allowed; }
-        .hidden { display: none; }
-        .turn-indicator {
-            background: #000000cc;
-            padding: 8px 15px;
-            border-radius: 40px;
-            display: inline-block;
-            margin-bottom: 15px;
-            font-size: 18px;
+
+        .shoot-btn.disabled {
+            background: #5f4a3b;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* СКРИМЕР (полный экран) */
+        .screamer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: 0.05s linear;
+        }
+
+        .screamer.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .screamer video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                flex-direction: column;
+            }
+            .rooms-panel {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
+
+<!-- ЛЕВАЯ ПАНЕЛЬ: комнаты -->
 <div class="rooms-panel">
-    <h3>🏠 ROOMS</h3>
+    <h3>🏠 ИГРОВЫЕ КОМНАТЫ</h3>
     <div class="room-list" id="roomList"></div>
-    <button class="create-btn" id="createRoomBtn">+ CREATE ROOM</button>
+    <button class="create-btn" id="createRoomBtn">➕ СОЗДАТЬ КОМНАТУ</button>
 </div>
+
+<!-- ОСНОВНОЙ БЛОК ИГРЫ -->
 <div class="game-container" id="gameContainer">
     <div id="joinRoomArea" class="join-area">
-        <input type="text" id="playerNameInput" class="join-input" placeholder="Your name">
-        <button id="joinRoomBtn" class="join-btn">JOIN ROOM</button>
+        <input type="text" id="playerNameInput" class="join-input" placeholder="Твоё имя">
+        <button id="joinRoomBtn" class="join-btn">🔫 ВОЙТИ В КОМНАТУ</button>
     </div>
     <div id="gameArea" style="display:none;">
         <div class="players-list" id="playersList"></div>
-        <div class="status-message" id="statusMsg">Waiting...</div>
+        <div class="status-message" id="statusMsg">Ожидание...</div>
         <div class="gun" id="gunIcon">🔫 💀 🔫</div>
-        <button id="startGameBtn" class="start-btn hidden">START GAME</button>
-        <button id="shootBtn" class="shoot-btn disabled" disabled>PULL TRIGGER</button>
+        <button id="startGameBtn" class="start-btn hidden">⚔️ СТАРТ ИГРЫ</button>
+        <button id="shootBtn" class="shoot-btn disabled" disabled>💥 ВЫСТРЕЛИТЬ</button>
     </div>
 </div>
 
+<!-- СКРИМЕР НА ВЕСЬ ЭКРАН -->
+<div id="screamer" class="screamer">
+    <video id="screamerVideo" autoplay muted playsinline>
+        <source src="https://media.giphy.com/media/v1.Y2lkPTEyMGNvbW1lbnRhcnkmY2Q9c2t5Ync2azlzZmJvNjFwZzh2aHZoYXVuYmI2b2p3cCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7abB06u9bNzA8LC8/giphy.mp4" type="video/mp4">
+    </video>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
     let currentRoomId = null;
@@ -159,6 +273,7 @@
     let myTurn = false;
     let currentPlayers = [];
 
+    // DOM-элементы
     const roomListDiv = document.getElementById('roomList');
     const createRoomBtn = document.getElementById('createRoomBtn');
     const joinRoomArea = document.getElementById('joinRoomArea');
@@ -170,21 +285,40 @@
     const startGameBtn = document.getElementById('startGameBtn');
     const shootBtn = document.getElementById('shootBtn');
     const gunIconSpan = document.getElementById('gunIcon');
+    const screamerDiv = document.getElementById('screamer');
+    const screamerVideo = document.getElementById('screamerVideo');
 
+    // === ПОЛНОЭКРАННЫЙ СКРИМЕР НА 1 СЕКУНДУ ===
+    function playScreamer() {
+        if (!screamerVideo) return;
+        screamerVideo.currentTime = 0;
+        screamerDiv.classList.add('active');
+        // Попробуем запустить видео, если оно не запустилось
+        screamerVideo.play().catch(e => console.log("autoplay blocked, but showing black"));
+        setTimeout(() => {
+            screamerDiv.classList.remove('active');
+            if (screamerVideo) screamerVideo.pause();
+        }, 1000);
+    }
+
+    // === ОТОБРАЖЕНИЕ СПИСКА КОМНАТ СЛЕВА ===
     function updateRoomsList(rooms) {
         roomListDiv.innerHTML = '';
         rooms.forEach(room => {
             const div = document.createElement('div');
             div.className = 'room-item' + (room.inGame ? ' in-game' : '');
-            div.innerHTML = `🎲 Room ${room.id} (${room.playerCount}/6)`;
-            if (!room.inGame) div.onclick = () => promptJoinRoom(room.id);
+            div.innerHTML = `<span>🎲 ${room.id}</span><span>👥 ${room.playerCount}/6</span>`;
+            if (!room.inGame) {
+                div.onclick = () => promptJoinRoom(room.id);
+            }
             roomListDiv.appendChild(div);
         });
     }
 
+    // === ПРИГЛАШЕНИЕ В КОМНАТУ ЧЕРЕЗ ЛЕВОЕ МЕНЮ ===
     function promptJoinRoom(roomId) {
         if (!myName) {
-            const name = prompt('Enter your name:');
+            const name = prompt('Введи своё имя:');
             if (!name) return;
             myName = name;
             playerNameInput.value = myName;
@@ -193,53 +327,68 @@
         socket.emit('join-room', { roomId, playerName: myName });
         joinRoomArea.style.display = 'none';
         gameArea.style.display = 'block';
-        statusMsgDiv.innerText = 'Joining room...';
+        statusMsgDiv.innerText = 'Подключение к комнате...';
     }
 
+    // === СОЗДАНИЕ КОМНАТЫ ===
     createRoomBtn.onclick = () => {
         let name = playerNameInput.value.trim();
-        if (!name) name = prompt('Enter your name:');
+        if (!name) name = prompt('Твоё имя:');
         if (!name) return;
         myName = name;
         socket.emit('create-room', myName);
         joinRoomArea.style.display = 'none';
         gameArea.style.display = 'block';
+        statusMsgDiv.innerText = 'Создание комнаты...';
     };
 
+    // === ВСТУПЛЕНИЕ В КОМНАТУ ПО КНОПКЕ "ВОЙТИ" ===
     joinRoomBtn.onclick = () => {
         if (!currentRoomId) {
-            alert('Select a room from the list first');
+            alert('Сначала выбери комнату в левом меню');
             return;
         }
         const name = playerNameInput.value.trim();
-        if (!name) { alert('Enter your name'); return; }
+        if (!name) { alert('Введите имя'); return; }
         myName = name;
         socket.emit('join-room', { roomId: currentRoomId, playerName: myName });
         joinRoomArea.style.display = 'none';
         gameArea.style.display = 'block';
     };
 
-    startGameBtn.onclick = () => { if (isCreator && !gameStarted) socket.emit('start-game', currentRoomId); };
-    shootBtn.onclick = () => { if (gameStarted && myTurn) socket.emit('shoot', currentRoomId); };
+    // === СТАРТ ИГРЫ (только создатель) ===
+    startGameBtn.onclick = () => {
+        if (isCreator && !gameStarted) socket.emit('start-game', currentRoomId);
+    };
 
+    // === ВЫСТРЕЛ ===
+    shootBtn.onclick = () => {
+        if (gameStarted && myTurn) socket.emit('shoot', currentRoomId);
+    };
+
+    // ========== СОКЕТЫ ==========
     socket.on('connect', () => { myId = socket.id; });
-    
+
+    // Обновление списка комнат (при создании/подключении/выходе)
     socket.on('update-rooms', (rooms) => updateRoomsList(rooms));
-    
+
+    // Комната создана
     socket.on('room-created', (data) => {
         currentRoomId = data.roomId;
         isCreator = true;
         myId = socket.id;
-        statusMsgDiv.innerText = `Room ${currentRoomId} created. Wait for players, then press START.`;
+        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} создана. Ожидай игроков, потом нажми СТАРТ.`;
         startGameBtn.classList.remove('hidden');
         updatePlayersUI(data.players);
     });
-    
+
+    // Обновление состава игроков в комнате
     socket.on('players-update', (players) => {
         currentPlayers = players;
         updatePlayersUI(players);
     });
-    
+
+    // СТАРТ ИГРЫ (получен с сервера)
     socket.on('game-start', (data) => {
         gameStarted = true;
         currentPlayers = data.players;
@@ -249,67 +398,77 @@
         else enableShoot(false);
         startGameBtn.classList.add('hidden');
         updateTurnHighlight();
-        if (myTurn) statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
-        else statusMsgDiv.innerText = "⏳ Waiting for other player... ⏳";
+        if (myTurn) statusMsgDiv.innerText = "🔫 ТВОЙ ХОД! ЖМИ ВЫСТРЕЛ! 🔫";
+        else statusMsgDiv.innerText = "⏳ Ожидаем ход другого игрока... ⏳";
     });
-    
+
+    // Смена хода
     socket.on('turn-update', (data) => {
         if (!gameStarted) return;
         myTurn = (data.playerId === myId);
-        if (myTurn) { 
-            enableShoot(true); 
-            statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
-        } else { 
-            enableShoot(false); 
-            statusMsgDiv.innerText = "⏳ Waiting for opponent... ⏳";
+        if (myTurn) {
+            enableShoot(true);
+            statusMsgDiv.innerText = "🔫 ТВОЯ ОЧЕРЕДЬ! СТРЕЛЯЙ! 🔫";
+        } else {
+            enableShoot(false);
+            statusMsgDiv.innerText = "⌛ Ждём, когда оппонент выстрелит...";
         }
         updateTurnHighlight();
     });
-    
+
+    // Результат выстрела
     socket.on('shot-fired', (data) => {
         if (data.isDead) {
             gunIconSpan.innerHTML = "💀 💥 💀";
-            if (data.playerId === myId) { 
-                statusMsgDiv.innerText = "💀 YOU DIED! 💀"; 
+            if (data.playerId === myId) {
+                statusMsgDiv.innerText = "💀 ТЫ УМЕР! 💀";
                 enableShoot(false);
-            } else { 
-                statusMsgDiv.innerText = "💀 A player was eliminated! 💀";
+                playScreamer();   // 👈 СКРИМЕР НА ВЕСЬ ЭКРАН ПРИ ПРОИГРЫШЕ
+            } else {
+                statusMsgDiv.innerText = "💀 ИГРОК ВЫЛЕТЕЛ! 💀";
             }
-        } else { 
-            gunIconSpan.innerHTML = "🔫 CLICK! 🔫"; 
+        } else {
+            gunIconSpan.innerHTML = "🔫 ЩЕЛЧОК! 🔫";
             setTimeout(() => gunIconSpan.innerHTML = "🔫 💀 🔫", 500);
-            statusMsgDiv.innerText = "🍀 CLICK... Lucky! 🍀";
+            statusMsgDiv.innerText = "🍀 Осечка... Повезло! 🍀";
         }
     });
-    
+
+    // Игрок мёртв, обновляем список
     socket.on('player-dead', (data) => {
         currentPlayers = data.playersLeft;
         updatePlayersUI(currentPlayers);
-        if (data.playerId === myId) { 
-            gameStarted = false; 
-            enableShoot(false); 
-            statusMsgDiv.innerText = "💀 Game over. You lost. 💀";
-        } else { 
-            statusMsgDiv.innerText = `☠️ ${currentPlayers.length} players remain. ☠️`;
+        if (data.playerId === myId) {
+            gameStarted = false;
+            enableShoot(false);
+            statusMsgDiv.innerText = "💀 ИГРА ЗАКОНЧЕНА. Ты проиграл. 💀";
+        } else {
+            statusMsgDiv.innerText = `☠️ В игре осталось: ${currentPlayers.length} чел. ☠️`;
             if (data.currentTurnId === myId) {
                 myTurn = true;
                 enableShoot(true);
-                statusMsgDiv.innerText = "🔫 YOUR TURN! Pull the trigger! 🔫";
+                statusMsgDiv.innerText = "🔫 ТВОЙ ХОД! СТРЕЛЯЙ! 🔫";
             }
             updateTurnHighlight();
         }
     });
-    
+
+    // ИГРА ОКОНЧЕНА (победитель)
     socket.on('game-over', (data) => {
         gameStarted = false;
         enableShoot(false);
-        statusMsgDiv.innerText = data.winner ? `🏆 WINNER: ${data.winner}! 🏆` : "💀 Game over! No survivors. 💀";
+        statusMsgDiv.innerText = data.winner ? `🏆 ПОБЕДИТЕЛЬ: ${data.winner}! 🏆` : "💀 Игра окончена. Все мертвы. 💀";
         startGameBtn.classList.add('hidden');
         setTimeout(() => location.reload(), 5000);
     });
-    
-    socket.on('error', (msg) => { alert(msg); location.reload(); });
 
+    // Ошибки (например, имя уже занято и т.д.)
+    socket.on('error', (msg) => {
+        alert(msg);
+        location.reload();
+    });
+
+    // === UI-ФУНКЦИИ ===
     function updatePlayersUI(players) {
         playersListDiv.innerHTML = '';
         players.forEach(p => {
@@ -317,43 +476,35 @@
             chip.className = 'player-chip';
             if (p.id === myId && p.isCreator) chip.classList.add('creator');
             chip.innerText = p.name + (p.isCreator ? ' 👑' : '');
-            if (gameStarted && p.id === players[currentTurnIndex()]?.id) {
+            if (gameStarted && window.currentTurnId === p.id) {
                 chip.classList.add('active');
             }
             playersListDiv.appendChild(chip);
         });
     }
-    
-    function currentTurnIndex() {
-        if (!gameStarted || !currentPlayers.length) return -1;
-        return currentPlayers.findIndex(p => p.id === (window.currentTurnId || (myTurn ? myId : null)));
-    }
-    
+
     function updateTurnHighlight() {
         const chips = document.querySelectorAll('.player-chip');
         chips.forEach((chip, idx) => {
             chip.classList.remove('active');
-            if (gameStarted && currentPlayers[idx] && currentPlayers[idx].id === (window.currentTurnId || (myTurn && gameStarted ? myId : null))) {
+            if (gameStarted && currentPlayers[idx] && currentPlayers[idx].id === window.currentTurnId) {
                 chip.classList.add('active');
             }
         });
     }
-    
+
     function enableShoot(enabled) {
-        if (enabled) { 
-            shootBtn.classList.remove('disabled'); 
-            shootBtn.disabled = false; 
-        } else { 
-            shootBtn.classList.add('disabled'); 
-            shootBtn.disabled = true; 
+        if (enabled) {
+            shootBtn.classList.remove('disabled');
+            shootBtn.disabled = false;
+        } else {
+            shootBtn.classList.add('disabled');
+            shootBtn.disabled = true;
         }
     }
-    
-    window.updateTurnHighlight = updateTurnHighlight;
-    window.currentTurnId = null;
-    
-    // Listen for turn updates to store current turn ID
-    const originalTurnUpdate = socket.on;
+
+    // Слушаем смену хода с сервера, сохраняем текущий turnId
+    const originalOn = socket.on;
     socket.on('turn-update', (data) => {
         window.currentTurnId = data.playerId;
         updateTurnHighlight();
