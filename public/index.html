@@ -219,7 +219,7 @@
                 currentUser = res;
                 loggedIn = true;
                 authOverlay.classList.add('hidden');
-                socket.emit('login', { username: currentUser, password: pass });
+                socket.emit('login', { username: currentUser });
             }
         } else {
             if (register(user, pass)) {
@@ -310,27 +310,26 @@
     };
 
     logoutBtn.onclick = () => {
-        loggedIn = false;
-        currentUser = null;
-        currentRoom = null;
-        gamePanel.style.display = 'none';
-        authOverlay.classList.remove('hidden');
-        authLogin.value = '';
-        authPassword.value = '';
-        socket.disconnect();
-        setTimeout(() => location.reload(), 100);
+        if (confirm('Выйти из аккаунта?')) {
+            socket.emit('logout');
+        }
     };
 
     socket.on('connect', () => {
         myId = socket.id;
         if (loggedIn && currentUser) {
-            socket.emit('login', { username: currentUser, password: '' });
+            socket.emit('login', { username: currentUser });
             if (currentRoom) socket.emit('join-room', currentRoom);
         }
     });
 
-    socket.on('login-success', (user) => {
-        console.log('Logged in as:', user);
+    socket.on('kicked', (msg) => {
+        alert(msg);
+        localStorage.removeItem('rr_users');
+        window.location.reload();
+    });
+
+    socket.on('login-success', () => {
         socket.emit('get-rooms');
     });
 
@@ -385,7 +384,11 @@
                 statusMsgDiv.innerText = "ТЫ УМЕР!";
                 enableShoot(false);
                 playScreamer();
-                setTimeout(() => location.reload(), 2000);
+                setTimeout(() => {
+                    socket.emit('leave-room');
+                    gamePanel.style.display = 'none';
+                    window.location.reload();
+                }, 2000);
             } else {
                 statusMsgDiv.innerText = "Игрок выбыл!";
             }
@@ -402,21 +405,53 @@
 
     socket.on('game-over', (data) => {
         gameStarted = false;
-        if (data.winner) statusMsgDiv.innerText = `ПОБЕДИТЕЛЬ: ${data.winner}!`;
-        else statusMsgDiv.innerText = "ИГРА ОКОНЧЕНА";
         enableShoot(false);
         startBtn.style.display = 'none';
-        setTimeout(() => location.reload(), 3000);
+        if (data.winner) {
+            statusMsgDiv.innerText = `ПОБЕДИТЕЛЬ: ${data.winner}!`;
+        } else {
+            statusMsgDiv.innerText = "ИГРА ОКОНЧЕНА";
+        }
+        setTimeout(() => {
+            socket.emit('leave-room');
+            gamePanel.style.display = 'none';
+            currentRoom = null;
+            isCreator = false;
+            gameStarted = false;
+            players = [];
+            socket.emit('get-rooms');
+        }, 3000);
+    });
+
+    socket.on('force-leave-room', () => {
+        gamePanel.style.display = 'none';
+        currentRoom = null;
+        isCreator = false;
+        gameStarted = false;
+        players = [];
+        socket.emit('get-rooms');
     });
 
     socket.on('left-room', () => {
+        gamePanel.style.display = 'none';
+        currentRoom = null;
+        isCreator = false;
+        gameStarted = false;
+        players = [];
+        socket.emit('get-rooms');
+    });
+
+    socket.on('logged-out', () => {
+        loggedIn = false;
+        currentUser = null;
         currentRoom = null;
         gamePanel.style.display = 'none';
+        authOverlay.classList.remove('hidden');
+        authLogin.value = '';
+        authPassword.value = '';
     });
 
     socket.on('error', (msg) => { alert(msg); });
-
-    socket.on('get-rooms', () => { socket.emit('get-rooms'); });
 </script>
 </body>
 </html>

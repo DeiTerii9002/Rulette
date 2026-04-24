@@ -12,6 +12,7 @@ const io = socketIo(server, {
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
+let activeUsers = new Map(); // username -> socket.id
 
 function generateRoomId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -32,14 +33,29 @@ io.on('connection', (socket) => {
     let userName = null;
     let userRoom = null;
 
-    socket.on('login', ({ username, password }) => {
+    socket.on('login', ({ username }) => {
+        // Проверка: если пользователь уже где-то залогинен
+        if (activeUsers.has(username)) {
+            const oldSocketId = activeUsers.get(username);
+            const oldSocket = io.sockets.sockets.get(oldSocketId);
+            if (oldSocket) {
+                oldSocket.emit('kicked', 'Вы вошли с другого устройства');
+                oldSocket.disconnect(true);
+            }
+        }
+        
         userName = username;
-        console.log(`📌 User logged in: ${userName}`);
+        activeUsers.set(username, socket.id);
+        console.log(`📌 User logged in: ${userName} (${socket.id})`);
         socket.emit('login-success', userName);
         broadcastRooms();
     });
 
     socket.on('create-room', () => {
+        if (!userName) {
+            socket.emit('error', 'Not logged in');
+            return;
+        }
         if (userRoom) {
             socket.emit('error', 'You are already in a room');
             return;
@@ -62,6 +78,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('join-room', (roomId) => {
+        if (!userName) {
+            socket.emit('error', 'Not logged in');
+            return;
+        }
         if (userRoom) {
             socket.emit('error', 'You are already in a room');
             return;
@@ -124,6 +144,16 @@ io.on('connection', (socket) => {
             if (room.players.length <= 1) {
                 const winner = room.players.length === 1 ? room.players[0].name : null;
                 io.to(userRoom).emit('game-over', { winner });
+                
+                const playersCopy = [...room.players];
+                playersCopy.forEach(player => {
+                    const playerSocket = io.sockets.sockets.get(player.id);
+                    if (playerSocket) {
+                        playerSocket.userRoom = null;
+                        playerSocket.emit('force-leave-room');
+                    }
+                });
+                
                 delete rooms[userRoom];
                 userRoom = null;
                 broadcastRooms();
@@ -160,21 +190,44 @@ io.on('connection', (socket) => {
         socket.emit('left-room');
     });
 
-    socket.on('disconnect', () => {
-        console.log(`❌ Client disconnected: ${socket.id} (${userName || 'unknown'})`);
+    socket.on('force-leave-room', () => {
+        if (userRoom) {
+            socket.leave(userRoom);
+            userRoom = null;
+        }
+        socket.emit('left-room');
+    });
+
+    socket.on('logout', () => {
         if (userRoom) {
             const room = rooms[userRoom];
             if (room) {
                 const index = room.players.findIndex(p => p.id === socket.id);
                 if (index !== -1) room.players.splice(index, 1);
-                if (room.players.length === 0) {
-                    delete rooms[userRoom];
-                } else if (room.gameStarted) {
-                    io.to(userRoom).emit('game-over', { winner: null });
-                    delete rooms[userRoom];
-                } else {
-                    io.to(userRoom).emit('room-players', room.players);
-                }
+                if (room.players.length === 0) delete rooms[userRoom];
+                else if (!room.gameStarted) io.to(userRoom).emit('room-players', room.players);
+                broadcastRooms();
+            }
+            socket.leave(userRoom);
+            userRoom = null;
+        }
+        if (userName) activeUsers.delete(userName);
+        userName = null;
+        socket.emit('logged-out');
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`❌ Client disconnected: ${socket.id} (${userName || 'unknown'})`);
+        if (userName && activeUsers.get(userName) === socket.id) {
+            activeUsers.delete(userName);
+        }
+        if (userRoom) {
+            const room = rooms[userRoom];
+            if (room) {
+                const index = room.players.findIndex(p => p.id === socket.id);
+                if (index !== -1) room.players.splice(index, 1);
+                if (room.players.length === 0) delete rooms[userRoom];
+                else if (!room.gameStarted) io.to(userRoom).emit('room-players', room.players);
                 broadcastRooms();
             }
         }
