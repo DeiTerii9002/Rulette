@@ -5,7 +5,9 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: { origin: "*", methods: ["GET", "POST"] }
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -15,24 +17,62 @@ function generateRoomId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+function getRoomsList() {
+    return Object.values(rooms).map(room => ({
+        id: room.id,
+        playerCount: room.players.length,
+        inGame: room.gameStarted
+    }));
+}
 
-    socket.on('create-room', (playerName) => {
+io.on('connection', (socket) => {
+    console.log('New connection:', socket.id);
+    let user = null;
+    let currentRoom = null;
+
+    socket.on('set-user', (username) => {
+        user = username;
+        console.log(`User ${user} set for ${socket.id}`);
+        socket.emit('user-set', user);
+    });
+
+    socket.on('get-rooms', () => {
+        socket.emit('rooms-list', getRoomsList());
+    });
+
+    socket.on('create-room', () => {
+        if (!user) {
+            socket.emit('error', 'Not logged in');
+            return;
+        }
+        if (currentRoom) {
+            socket.emit('error', 'You are already in a room');
+            return;
+        }
         const roomId = generateRoomId();
         rooms[roomId] = {
             id: roomId,
-            players: [{ id: socket.id, name: playerName, isCreator: true }],
+            players: [{ id: socket.id, name: user, isCreator: true }],
             gameStarted: false,
             currentTurn: 0,
             chamber: 0
         };
+        currentRoom = roomId;
         socket.join(roomId);
-        socket.emit('room-created', { roomId, players: rooms[roomId].players });
-        io.emit('update-rooms', getRoomsList());
+        socket.emit('room-created', roomId);
+        io.emit('rooms-list', getRoomsList());
+        console.log(`Room ${roomId} created by ${user}`);
     });
 
-    socket.on('join-room', ({ roomId, playerName }) => {
+    socket.on('join-room', (roomId) => {
+        if (!user) {
+            socket.emit('error', 'Not logged in');
+            return;
+        }
+        if (currentRoom) {
+            socket.emit('error', 'You are already in a room');
+            return;
+        }
         const room = rooms[roomId];
         if (!room) {
             socket.emit('error', 'Room not found');
@@ -46,101 +86,113 @@ io.on('connection', (socket) => {
             socket.emit('error', 'Room is full');
             return;
         }
-        if (room.players.some(p => p.name === playerName)) {
-            socket.emit('error', 'Name already taken in this room');
+        if (room.players.some(p => p.name === user)) {
+            socket.emit('error', 'Already in this room');
             return;
         }
-        room.players.push({ id: socket.id, name: playerName, isCreator: false });
+        room.players.push({ id: socket.id, name: user, isCreator: false });
+        currentRoom = roomId;
         socket.join(roomId);
-        io.to(roomId).emit('players-update', room.players);
-        io.emit('update-rooms', getRoomsList());
+        socket.emit('joined-room', roomId);
+        io.to(roomId).emit('room-players', room.players);
+        io.emit('rooms-list', getRoomsList());
+        console.log(`${user} joined room ${roomId}`);
     });
 
-    socket.on('start-game', (roomId) => {
-        const room = rooms[roomId];
+    socket.on('start-game', () => {
+        if (!currentRoom) return;
+        const room = rooms[currentRoom];
         if (!room) return;
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.isCreator) {
-            socket.emit('error', 'Only room creator can start the game');
+            socket.emit('error', 'Only creator can start');
             return;
         }
         if (room.gameStarted) return;
-        if (room.players.length < 1) return;
         
         room.gameStarted = true;
         room.currentTurn = 0;
         room.chamber = Math.floor(Math.random() * 6);
         
-        io.to(roomId).emit('game-start', {
+        io.to(currentRoom).emit('game-started', {
             players: room.players.map(p => ({ id: p.id, name: p.name })),
-            firstPlayerId: room.players[0].id
+            firstPlayer: room.players[0].id
         });
     });
 
-    socket.on('shoot', (roomId) => {
-        const room = rooms[roomId];
+    socket.on('shoot', () => {
+        if (!currentRoom) return;
+        const room = rooms[currentRoom];
         if (!room || !room.gameStarted) return;
         if (room.players[room.currentTurn].id !== socket.id) return;
         
         const isDead = room.chamber === 0;
-        io.to(roomId).emit('shot-fired', { playerId: socket.id, isDead });
+        io.to(currentRoom).emit('shot-result', { player: socket.id, dead: isDead });
         
         if (isDead) {
-            const deadIndex = room.players.findIndex(p => p.id === socket.id);
-            room.players.splice(deadIndex, 1);
-            io.to(roomId).emit('player-dead', { 
-                playerId: socket.id, 
-                playersLeft: room.players.map(p => ({ id: p.id, name: p.name })),
-                currentTurnId: room.players.length > 0 ? room.players[room.currentTurn >= room.players.length ? 0 : room.currentTurn].id : null
-            });
+            const index = room.players.findIndex(p => p.id === socket.id);
+            room.players.splice(index, 1);
+            io.to(currentRoom).emit('player-left', { players: room.players.map(p => ({ id: p.id, name: p.name })) });
             
             if (room.players.length <= 1) {
                 const winner = room.players.length === 1 ? room.players[0].name : null;
-                io.to(roomId).emit('game-over', { winner });
-                delete rooms[roomId];
-                io.emit('update-rooms', getRoomsList());
+                io.to(currentRoom).emit('game-ended', { winner });
+                delete rooms[currentRoom];
+                currentRoom = null;
+                io.emit('rooms-list', getRoomsList());
                 return;
             }
             if (room.currentTurn >= room.players.length) room.currentTurn = 0;
-            io.to(roomId).emit('turn-update', { playerId: room.players[room.currentTurn].id });
+            io.to(currentRoom).emit('turn-change', { player: room.players[room.currentTurn].id });
             room.chamber = Math.floor(Math.random() * 6);
         } else {
             room.chamber = (room.chamber + 1) % 6;
             room.currentTurn = (room.currentTurn + 1) % room.players.length;
-            io.to(roomId).emit('turn-update', { playerId: room.players[room.currentTurn].id });
+            io.to(currentRoom).emit('turn-change', { player: room.players[room.currentTurn].id });
         }
     });
 
+    socket.on('leave-room', () => {
+        if (!currentRoom) return;
+        const room = rooms[currentRoom];
+        if (room) {
+            const index = room.players.findIndex(p => p.id === socket.id);
+            if (index !== -1) room.players.splice(index, 1);
+            if (room.players.length === 0) {
+                delete rooms[currentRoom];
+            } else if (room.gameStarted) {
+                io.to(currentRoom).emit('game-ended', { winner: null });
+                delete rooms[currentRoom];
+            } else {
+                io.to(currentRoom).emit('room-players', room.players);
+            }
+            io.emit('rooms-list', getRoomsList());
+        }
+        socket.leave(currentRoom);
+        currentRoom = null;
+        socket.emit('left-room');
+    });
+
     socket.on('disconnect', () => {
-        for (let roomId in rooms) {
-            const room = rooms[roomId];
-            const playerIndex = room.players.findIndex(p => p.id === socket.id);
-            if (playerIndex !== -1) {
-                room.players.splice(playerIndex, 1);
-                io.to(roomId).emit('players-update', room.players);
+        console.log('Disconnected:', socket.id);
+        if (currentRoom) {
+            const room = rooms[currentRoom];
+            if (room) {
+                const index = room.players.findIndex(p => p.id === socket.id);
+                if (index !== -1) room.players.splice(index, 1);
                 if (room.players.length === 0) {
-                    delete rooms[roomId];
-                } else if (room.gameStarted && room.players.length < 2) {
-                    io.to(roomId).emit('game-over', { winner: room.players.length ? room.players[0].name : null });
-                    delete rooms[roomId];
-                } else if (room.gameStarted && room.currentTurn >= room.players.length) {
-                    room.currentTurn = 0;
-                    io.to(roomId).emit('turn-update', { playerId: room.players[0].id });
+                    delete rooms[currentRoom];
+                } else if (room.gameStarted) {
+                    io.to(currentRoom).emit('game-ended', { winner: null });
+                    delete rooms[currentRoom];
+                } else {
+                    io.to(currentRoom).emit('room-players', room.players);
                 }
-                io.emit('update-rooms', getRoomsList());
-                break;
+                io.emit('rooms-list', getRoomsList());
             }
         }
     });
 });
 
-function getRoomsList() {
-    return Object.values(rooms).map(room => ({
-        id: room.id,
-        playerCount: room.players.length,
-        inGame: room.gameStarted
-    }));
-}
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
