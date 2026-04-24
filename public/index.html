@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Russian Roulette · Поиск по коду</title>
     <style>
-        * {
-            box-sizing: border-box;
-            user-select: none;
-        }
-
+        * { box-sizing: border-box; user-select: none; }
         body {
             background: linear-gradient(145deg, #1a3c2c 0%, #0e2a1f 100%);
             font-family: 'Courier New', 'Segoe UI', monospace;
@@ -19,7 +15,6 @@
             display: flex;
             gap: 20px;
         }
-
         .rooms-panel {
             width: 300px;
             background: #2d221c;
@@ -29,13 +24,7 @@
             height: fit-content;
             box-shadow: 0 10px 20px rgba(0,0,0,0.4);
         }
-
-        .rooms-panel h3 {
-            color: #f5e2b9;
-            text-align: center;
-            margin: 0 0 15px;
-        }
-
+        .rooms-panel h3 { color: #f5e2b9; text-align: center; margin: 0 0 15px; }
         .room-list {
             display: flex;
             flex-direction: column;
@@ -44,7 +33,6 @@
             overflow-y: auto;
             margin-bottom: 20px;
         }
-
         .room-item {
             background: #1e1713;
             padding: 10px 15px;
@@ -56,22 +44,9 @@
             display: flex;
             justify-content: space-between;
         }
-
-        .room-item:hover {
-            background: #b3592c;
-            color: white;
-            transform: scale(1.02);
-        }
-
-        .room-item.in-game {
-            opacity: 0.6;
-            cursor: not-allowed;
-            background: #5f4a3b;
-        }
-
-        .search-area {
-            margin-bottom: 15px;
-        }
+        .room-item:hover { background: #b3592c; color: white; transform: scale(1.02); }
+        .room-item.in-game { opacity: 0.6; cursor: not-allowed; background: #5f4a3b; }
+        .search-area { margin-bottom: 15px; }
         .search-input {
             width: 100%;
             background: #2e241f;
@@ -83,30 +58,18 @@
             text-align: center;
             margin-bottom: 10px;
         }
-        .search-btn {
-            width: 100%;
-            background: #b3592c;
-            border: none;
-            padding: 10px;
-            border-radius: 40px;
-            font-weight: bold;
-            color: white;
-            cursor: pointer;
-        }
-
-        .create-btn {
+        .search-btn, .create-btn {
             width: 100%;
             background: #b3592c;
             border: none;
             padding: 12px;
             border-radius: 40px;
-            color: white;
             font-weight: bold;
-            margin-top: 10px;
+            color: white;
             cursor: pointer;
             font-size: 16px;
+            margin-top: 10px;
         }
-
         .game-container {
             flex: 1;
             background: #2d221c;
@@ -114,7 +77,6 @@
             padding: 30px 25px;
             border: 1px solid #b87a4f;
         }
-
         .auth-overlay {
             position: fixed;
             top: 0;
@@ -128,7 +90,6 @@
             justify-content: center;
             backdrop-filter: blur(5px);
         }
-
         .auth-box {
             background: #2d221c;
             border: 2px solid #b87a4f;
@@ -138,12 +99,7 @@
             text-align: center;
             box-shadow: 0 0 40px rgba(0,0,0,0.8);
         }
-
-        .auth-box h2 {
-            color: #f5e2b9;
-            margin-bottom: 25px;
-        }
-
+        .auth-box h2 { color: #f5e2b9; margin-bottom: 25px; }
         .auth-input {
             width: 100%;
             background: #2e241f;
@@ -155,7 +111,6 @@
             margin-bottom: 15px;
             outline: none;
         }
-
         .auth-btn {
             background: #b3592c;
             border: none;
@@ -168,26 +123,9 @@
             font-size: 18px;
             margin-top: 10px;
         }
-
-        .auth-switch {
-            margin-top: 15px;
-            color: #f0cba0;
-            cursor: pointer;
-            text-decoration: underline;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .players-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            justify-content: center;
-            margin: 15px 0;
-        }
-
+        .auth-switch { margin-top: 15px; color: #f0cba0; cursor: pointer; text-decoration: underline; }
+        .hidden { display: none; }
+        .players-list { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 15px 0; }
         .player-chip {
             background: #45342b;
             padding: 10px 18px;
@@ -197,19 +135,8 @@
             border-left: 6px solid #d49152;
             transition: 0.2s;
         }
-
-        .player-chip.active {
-            background: #8b4513;
-            border-left-color: gold;
-            box-shadow: 0 0 12px #ffa559;
-            color: #ffefb9;
-            transform: scale(1.05);
-        }
-
-        .player-chip.creator {
-            border-right: 3px solid gold;
-        }
-
+        .player-chip.active { background: #8b4513; border-left-color: gold; box-shadow: 0 0 12px #ffa559; color: #ffefb9; transform: scale(1.05); }
+        .player-chip.creator { border-right: 3px solid gold; }
         .status-message {
             background: #000000aa;
             backdrop-filter: blur(8px);
@@ -221,17 +148,7 @@
             margin: 15px 0;
             font-weight: bold;
         }
-
-        .gun {
-            text-align: center;
-            font-size: 70px;
-            letter-spacing: 16px;
-            background: #362217;
-            border-radius: 80px;
-            padding: 15px;
-            margin: 10px 0;
-        }
-
+        .gun { text-align: center; font-size: 70px; letter-spacing: 16px; background: #362217; border-radius: 80px; padding: 15px; margin: 10px 0; }
         .shoot-btn {
             background: #ac3e1c;
             width: 80%;
@@ -245,13 +162,7 @@
             display: block;
             margin: 20px auto;
         }
-
-        .shoot-btn.disabled {
-            background: #5f4a3b;
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
+        .shoot-btn.disabled { background: #5f4a3b; opacity: 0.6; cursor: not-allowed; }
         .screamer {
             position: fixed;
             top: 0;
@@ -267,48 +178,11 @@
             visibility: hidden;
             transition: 0s linear;
         }
-
-        .screamer.active {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .screamer img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .logout-btn {
-            background: #5f2e1a;
-            margin-top: 15px;
-            border: none;
-            padding: 8px;
-            border-radius: 30px;
-            color: #f0cba0;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        .back-btn {
-            background: #3a2a22;
-            margin-top: 10px;
-            border: none;
-            padding: 8px;
-            border-radius: 30px;
-            color: #f0cba0;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        @media (max-width: 700px) {
-            body {
-                flex-direction: column;
-            }
-            .rooms-panel {
-                width: 100%;
-            }
-        }
+        .screamer.active { opacity: 1; visibility: visible; }
+        .screamer img { width: 100%; height: 100%; object-fit: cover; }
+        .logout-btn { background: #5f2e1a; margin-top: 15px; border: none; padding: 8px; border-radius: 30px; color: #f0cba0; cursor: pointer; width: 100%; }
+        .back-btn { background: #3a2a22; margin-top: 10px; border: none; padding: 8px; border-radius: 30px; color: #f0cba0; cursor: pointer; width: 100%; }
+        @media (max-width: 700px) { body { flex-direction: column; } .rooms-panel { width: 100%; } }
     </style>
 </head>
 <body>
@@ -316,12 +190,10 @@
 <div class="rooms-panel">
     <h3>💀 КОМНАТЫ 💀</h3>
     <div class="room-list" id="roomList"></div>
-    
     <div class="search-area">
         <input type="text" id="roomCodeInput" class="search-input" placeholder="Введите код комнаты">
         <button id="joinByCodeBtn" class="search-btn">🔍 ВОЙТИ ПО КОДУ</button>
     </div>
-    
     <button class="create-btn" id="createRoomBtn">🔪 СОЗДАТЬ КОМНАТУ</button>
     <button class="logout-btn" id="logoutBtn">🚪 ВЫЙТИ</button>
 </div>
@@ -365,7 +237,6 @@
     let currentPlayers = [];
     let currentUser = null;
 
-    // DOM
     const roomListDiv = document.getElementById('roomList');
     const createRoomBtn = document.getElementById('createRoomBtn');
     const gameArea = document.getElementById('gameArea');
@@ -427,6 +298,9 @@
         currentUser = null;
         authOverlay.classList.remove('hidden');
         gameArea.style.display = 'none';
+        currentRoomId = null;
+        isCreator = false;
+        gameStarted = false;
         location.reload();
     }
 
@@ -513,6 +387,10 @@
     };
 
     joinByCodeBtn.onclick = () => {
+        if (!currentUser) {
+            alert('Сначала авторизуйтесь');
+            return;
+        }
         const code = roomCodeInput.value.trim().toUpperCase();
         if (!code) {
             alert('Введите код комнаты');
