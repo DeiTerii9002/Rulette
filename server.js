@@ -5,14 +5,12 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = socketIo(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
 let rooms = {};
-let activeUsers = new Map(); // username -> socket.id
+let activeUsers = {};
 
 function generateRoomId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -28,206 +26,124 @@ function broadcastRooms() {
 }
 
 io.on('connection', (socket) => {
-    console.log('✅ Client connected:', socket.id);
-    
-    let userName = null;
-    let userRoom = null;
+    let currentUser = null;
+    let currentRoom = null;
 
     socket.on('login', ({ username }) => {
-        // Проверка: если пользователь уже где-то залогинен
-        if (activeUsers.has(username)) {
-            const oldSocketId = activeUsers.get(username);
-            const oldSocket = io.sockets.sockets.get(oldSocketId);
-            if (oldSocket) {
-                oldSocket.emit('kicked', 'Вы вошли с другого устройства');
-                oldSocket.disconnect(true);
-            }
+        if (activeUsers[username]) {
+            socket.emit('login-failed', 'Этот аккаунт уже используется');
+            return;
         }
-        
-        userName = username;
-        activeUsers.set(username, socket.id);
-        console.log(`📌 User logged in: ${userName} (${socket.id})`);
-        socket.emit('login-success', userName);
+        currentUser = username;
+        activeUsers[username] = socket.id;
+        socket.emit('login-success', username);
         broadcastRooms();
     });
 
     socket.on('create-room', () => {
-        if (!userName) {
-            socket.emit('error', 'Not logged in');
-            return;
-        }
-        if (userRoom) {
-            socket.emit('error', 'You are already in a room');
-            return;
-        }
+        if (!currentUser) return;
+        if (currentRoom) return;
         const roomId = generateRoomId();
         rooms[roomId] = {
             id: roomId,
-            creator: socket.id,
-            creatorName: userName,
-            players: [{ id: socket.id, name: userName, isCreator: true }],
+            players: [{ id: socket.id, name: currentUser, isCreator: true }],
             gameStarted: false,
             currentTurn: 0,
-            chamber: Math.floor(Math.random() * 6)
+            chamber: 0
         };
-        userRoom = roomId;
+        currentRoom = roomId;
         socket.join(roomId);
         socket.emit('room-created', roomId);
         broadcastRooms();
-        console.log(`🏠 Room created: ${roomId} by ${userName}`);
     });
 
     socket.on('join-room', (roomId) => {
-        if (!userName) {
-            socket.emit('error', 'Not logged in');
-            return;
-        }
-        if (userRoom) {
-            socket.emit('error', 'You are already in a room');
-            return;
-        }
+        if (!currentUser) return;
+        if (currentRoom) return;
         const room = rooms[roomId];
-        if (!room) {
-            socket.emit('error', 'Room not found');
-            return;
-        }
-        if (room.gameStarted) {
-            socket.emit('error', 'Game already started');
-            return;
-        }
-        if (room.players.length >= 6) {
-            socket.emit('error', 'Room is full');
-            return;
-        }
-        room.players.push({ id: socket.id, name: userName, isCreator: false });
-        userRoom = roomId;
+        if (!room) return socket.emit('error', 'Комната не найдена');
+        if (room.gameStarted) return socket.emit('error', 'Игра уже началась');
+        if (room.players.length >= 6) return socket.emit('error', 'Комната полна');
+        room.players.push({ id: socket.id, name: currentUser, isCreator: false });
+        currentRoom = roomId;
         socket.join(roomId);
         socket.emit('joined-room', roomId);
         io.to(roomId).emit('room-players', room.players);
         broadcastRooms();
-        console.log(`👤 ${userName} joined room ${roomId}`);
     });
 
     socket.on('start-game', () => {
-        const room = rooms[userRoom];
+        const room = rooms[currentRoom];
         if (!room) return;
-        if (room.creator !== socket.id) {
-            socket.emit('error', 'Only creator can start');
-            return;
-        }
+        if (room.players[0].id !== socket.id) return;
         if (room.gameStarted) return;
         room.gameStarted = true;
         room.currentTurn = 0;
         room.chamber = Math.floor(Math.random() * 6);
-        io.to(userRoom).emit('game-started', {
+        io.to(currentRoom).emit('game-started', {
             players: room.players.map(p => ({ id: p.id, name: p.name })),
             firstPlayer: room.players[0].id
         });
-        console.log(`🎮 Game started in room ${userRoom}`);
     });
 
     socket.on('shoot', () => {
-        const room = rooms[userRoom];
+        const room = rooms[currentRoom];
         if (!room || !room.gameStarted) return;
         if (room.players[room.currentTurn].id !== socket.id) return;
-        
         const isDead = room.chamber === 0;
-        io.to(userRoom).emit('shot-result', { playerId: socket.id, dead: isDead });
-        
+        io.to(currentRoom).emit('shot-result', { playerId: socket.id, dead: isDead });
         if (isDead) {
             const index = room.players.findIndex(p => p.id === socket.id);
             room.players.splice(index, 1);
-            io.to(userRoom).emit('player-died', { 
-                players: room.players.map(p => ({ id: p.id, name: p.name }))
-            });
-            
+            io.to(currentRoom).emit('player-died', { players: room.players });
             if (room.players.length <= 1) {
                 const winner = room.players.length === 1 ? room.players[0].name : null;
-                io.to(userRoom).emit('game-over', { winner });
-                
-                const playersCopy = [...room.players];
-                playersCopy.forEach(player => {
-                    const playerSocket = io.sockets.sockets.get(player.id);
-                    if (playerSocket) {
-                        playerSocket.userRoom = null;
-                        playerSocket.emit('force-leave-room');
-                    }
-                });
-                
-                delete rooms[userRoom];
-                userRoom = null;
+                io.to(currentRoom).emit('game-over', { winner });
+                delete rooms[currentRoom];
+                currentRoom = null;
                 broadcastRooms();
                 return;
             }
             if (room.currentTurn >= room.players.length) room.currentTurn = 0;
+            io.to(currentRoom).emit('turn-change', { playerId: room.players[room.currentTurn].id });
             room.chamber = Math.floor(Math.random() * 6);
-            io.to(userRoom).emit('turn-change', { playerId: room.players[room.currentTurn].id });
         } else {
             room.chamber = (room.chamber + 1) % 6;
             room.currentTurn = (room.currentTurn + 1) % room.players.length;
-            io.to(userRoom).emit('turn-change', { playerId: room.players[room.currentTurn].id });
+            io.to(currentRoom).emit('turn-change', { playerId: room.players[room.currentTurn].id });
         }
     });
 
     socket.on('leave-room', () => {
-        if (!userRoom) return;
-        const room = rooms[userRoom];
+        if (!currentRoom) return;
+        const room = rooms[currentRoom];
         if (room) {
-            const index = room.players.findIndex(p => p.id === socket.id);
-            if (index !== -1) room.players.splice(index, 1);
-            if (room.players.length === 0) {
-                delete rooms[userRoom];
-            } else if (room.gameStarted) {
-                io.to(userRoom).emit('game-over', { winner: null });
-                delete rooms[userRoom];
-            } else {
-                io.to(userRoom).emit('room-players', room.players);
-            }
-            socket.leave(userRoom);
+            const idx = room.players.findIndex(p => p.id === socket.id);
+            if (idx !== -1) room.players.splice(idx, 1);
+            if (room.players.length === 0) delete rooms[currentRoom];
+            else io.to(currentRoom).emit('room-players', room.players);
             broadcastRooms();
         }
-        userRoom = null;
-        socket.emit('left-room');
-    });
-
-    socket.on('force-leave-room', () => {
-        if (userRoom) {
-            socket.leave(userRoom);
-            userRoom = null;
-        }
+        socket.leave(currentRoom);
+        currentRoom = null;
         socket.emit('left-room');
     });
 
     socket.on('logout', () => {
-        if (userRoom) {
-            const room = rooms[userRoom];
-            if (room) {
-                const index = room.players.findIndex(p => p.id === socket.id);
-                if (index !== -1) room.players.splice(index, 1);
-                if (room.players.length === 0) delete rooms[userRoom];
-                else if (!room.gameStarted) io.to(userRoom).emit('room-players', room.players);
-                broadcastRooms();
-            }
-            socket.leave(userRoom);
-            userRoom = null;
-        }
-        if (userName) activeUsers.delete(userName);
-        userName = null;
+        if (currentUser && activeUsers[currentUser] === socket.id) delete activeUsers[currentUser];
+        if (currentRoom) socket.emit('leave-room');
         socket.emit('logged-out');
     });
 
     socket.on('disconnect', () => {
-        console.log(`❌ Client disconnected: ${socket.id} (${userName || 'unknown'})`);
-        if (userName && activeUsers.get(userName) === socket.id) {
-            activeUsers.delete(userName);
-        }
-        if (userRoom) {
-            const room = rooms[userRoom];
+        if (currentUser && activeUsers[currentUser] === socket.id) delete activeUsers[currentUser];
+        if (currentRoom) {
+            const room = rooms[currentRoom];
             if (room) {
-                const index = room.players.findIndex(p => p.id === socket.id);
-                if (index !== -1) room.players.splice(index, 1);
-                if (room.players.length === 0) delete rooms[userRoom];
-                else if (!room.gameStarted) io.to(userRoom).emit('room-players', room.players);
+                const idx = room.players.findIndex(p => p.id === socket.id);
+                if (idx !== -1) room.players.splice(idx, 1);
+                if (room.players.length === 0) delete rooms[currentRoom];
+                else io.to(currentRoom).emit('room-players', room.players);
                 broadcastRooms();
             }
         }
@@ -235,4 +151,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`✅ Server on port ${PORT}`));

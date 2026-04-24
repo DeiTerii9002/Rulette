@@ -24,14 +24,7 @@
             border: 1px solid #b87a4f;
         }
         .rooms-panel h3 { color: #f5e2b9; text-align: center; margin-bottom: 15px; }
-        .room-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 20px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
+        .room-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; }
         .room-item {
             background: #1e1713;
             padding: 10px;
@@ -55,10 +48,7 @@
             margin-top: 10px;
             width: 100%;
         }
-        button {
-            background: #b3592c;
-            cursor: pointer;
-        }
+        button { background: #b3592c; cursor: pointer; }
         button:hover { opacity: 0.8; }
         .game-panel {
             background: #2d221c;
@@ -159,6 +149,7 @@
     let turnPlayerId = null;
     let myId = null;
 
+    // DOM
     const authOverlay = document.getElementById('authOverlay');
     const authTitle = document.getElementById('authTitle');
     const authLogin = document.getElementById('authLogin');
@@ -312,6 +303,7 @@
     logoutBtn.onclick = () => {
         if (confirm('Выйти из аккаунта?')) {
             socket.emit('logout');
+            location.reload();
         }
     };
 
@@ -323,10 +315,9 @@
         }
     });
 
-    socket.on('kicked', (msg) => {
+    socket.on('login-failed', (msg) => {
         alert(msg);
-        localStorage.removeItem('rr_users');
-        window.location.reload();
+        location.reload();
     });
 
     socket.on('login-success', () => {
@@ -384,11 +375,7 @@
                 statusMsgDiv.innerText = "ТЫ УМЕР!";
                 enableShoot(false);
                 playScreamer();
-                setTimeout(() => {
-                    socket.emit('leave-room');
-                    gamePanel.style.display = 'none';
-                    window.location.reload();
-                }, 2000);
+                setTimeout(() => location.reload(), 2000);
             } else {
                 statusMsgDiv.innerText = "Игрок выбыл!";
             }
@@ -419,17 +406,7 @@
             isCreator = false;
             gameStarted = false;
             players = [];
-            socket.emit('get-rooms');
         }, 3000);
-    });
-
-    socket.on('force-leave-room', () => {
-        gamePanel.style.display = 'none';
-        currentRoom = null;
-        isCreator = false;
-        gameStarted = false;
-        players = [];
-        socket.emit('get-rooms');
     });
 
     socket.on('left-room', () => {
@@ -438,7 +415,6 @@
         isCreator = false;
         gameStarted = false;
         players = [];
-        socket.emit('get-rooms');
     });
 
     socket.on('logged-out', () => {
