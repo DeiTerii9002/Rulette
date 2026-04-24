@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Russian Roulette · Исправлено</title>
+    <title>Russian Roulette · Вход обязателен</title>
     <style>
         * { box-sizing: border-box; user-select: none; }
         body {
@@ -219,9 +219,9 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+    // ========== НЕТ АВТО-ВХОДА. КАЖДЫЙ РАЗ ЗАНОВО ==========
     const socket = io();
     
-    // Состояние
     let currentRoomId = null;
     let myId = null;
     let isCreator = false;
@@ -229,8 +229,8 @@
     let myTurn = false;
     let currentPlayers = [];
     let currentUser = null;
-    let myRoomId = null; // для проверки - 1 игрок = 1 комната
-    
+    let myRoomId = null;
+
     // DOM
     const roomListDiv = document.getElementById('roomList');
     const gameArea = document.getElementById('gameArea');
@@ -254,7 +254,7 @@
 
     let isLoginMode = true;
 
-    // === АВТОРИЗАЦИЯ ===
+    // === АВТОРИЗАЦИЯ (простая, без авто-входа) ===
     function loadUsers() {
         const users = localStorage.getItem('roulette_users');
         return users ? JSON.parse(users) : {};
@@ -268,7 +268,7 @@
         const users = loadUsers();
         if (users[username]) {
             alert('Имя уже занято');
-            return false;
+            return null;
         }
         users[username] = password;
         saveUsers(users);
@@ -279,35 +279,27 @@
     function login(username, password) {
         const users = loadUsers();
         if (users[username] && users[username] === password) {
-            currentUser = username;
-            localStorage.setItem('roulette_current_user', username);
-            return true;
+            return username;
         }
         alert('Неверное имя или пароль');
-        return false;
+        return null;
     }
 
-    function logout() {
-        localStorage.removeItem('roulette_current_user');
-        currentUser = null;
-        myRoomId = null;
-        currentRoomId = null;
-        gameArea.style.display = 'none';
+    function showAuthScreen() {
         authOverlay.classList.remove('hidden');
-        authUsername.value = '';
-        authPassword.value = '';
-        location.reload();
+        gameArea.style.display = 'none';
+        currentUser = null;
+        currentRoomId = null;
+        myRoomId = null;
+        isCreator = false;
+        gameStarted = false;
+        myTurn = false;
+        currentPlayers = [];
+        myId = null;
     }
 
-    function checkAutoLogin() {
-        const savedUser = localStorage.getItem('roulette_current_user');
-        if (savedUser) {
-            currentUser = savedUser;
-            authOverlay.classList.add('hidden');
-            socket.emit('set-user', currentUser);
-        } else {
-            authOverlay.classList.remove('hidden');
-        }
+    function hideAuthScreen() {
+        authOverlay.classList.add('hidden');
     }
 
     // === ИГРОВЫЕ ФУНКЦИИ ===
@@ -333,7 +325,7 @@
             if (!room.inGame) {
                 div.onclick = () => {
                     if (myRoomId) {
-                        alert('Вы уже находитесь в комнате ' + myRoomId + '. Выйдите сначала.');
+                        alert('Вы уже в комнате ' + myRoomId);
                         return;
                     }
                     currentRoomId = room.id;
@@ -377,14 +369,14 @@
         }
     }
 
-    // === ОБРАБОТЧИКИ КНОПОК ===
+    // === ОБРАБОТЧИКИ ===
     createRoomBtn.onclick = () => {
         if (!currentUser) {
             alert('Сначала авторизуйтесь');
             return;
         }
         if (myRoomId) {
-            alert('Вы уже находитесь в комнате ' + myRoomId + '. Нельзя создать новую.');
+            alert('Вы уже в комнате ' + myRoomId);
             return;
         }
         socket.emit('create-room');
@@ -396,14 +388,11 @@
             return;
         }
         if (myRoomId) {
-            alert('Вы уже находитесь в комнате ' + myRoomId + '. Выйдите сначала.');
+            alert('Вы уже в комнате ' + myRoomId);
             return;
         }
         const code = roomCodeInput.value.trim().toUpperCase();
-        if (!code) {
-            alert('Введите код комнаты');
-            return;
-        }
+        if (!code) return alert('Введите код');
         currentRoomId = code;
         socket.emit('join-room', code);
         gameArea.style.display = 'block';
@@ -431,7 +420,12 @@
         location.reload();
     };
 
-    logoutBtn.onclick = () => logout();
+    logoutBtn.onclick = () => {
+        localStorage.removeItem('roulette_users'); // чистим всё
+        showAuthScreen();
+        socket.disconnect();
+        setTimeout(() => location.reload(), 100);
+    };
 
     // === АВТОРИЗАЦИЯ UI ===
     authSwitch.onclick = () => {
@@ -449,11 +443,15 @@
             return;
         }
         if (isLoginMode) {
-            if (login(username, password)) {
-                authOverlay.classList.add('hidden');
-                currentUser = username;
+            const user = login(username, password);
+            if (user) {
+                currentUser = user;
+                hideAuthScreen();
                 socket.emit('set-user', currentUser);
-                location.reload();
+                authUsername.value = '';
+                authPassword.value = '';
+                // обновим комнаты
+                socket.emit('request-rooms');
             }
         } else {
             if (register(username, password)) {
@@ -473,6 +471,7 @@
         if (currentUser) {
             socket.emit('set-user', currentUser);
         }
+        socket.emit('request-rooms');
     });
 
     socket.on('update-rooms', (rooms) => updateRoomsList(rooms));
@@ -482,7 +481,7 @@
         currentRoomId = data.roomId;
         isCreator = true;
         roomCodeDisplay.innerText = currentRoomId;
-        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} создана. Ожидай игроков, потом СТАРТ.`;
+        statusMsgDiv.innerText = `✅ Комната ${currentRoomId} создана. Ждём игроков, потом СТАРТ.`;
         startGameBtn.classList.remove('hidden');
         startGameBtn.style.display = 'block';
         updatePlayersUI(data.players);
@@ -511,7 +510,7 @@
         enableShoot(myTurn);
         startGameBtn.classList.add('hidden');
         updateTurnHighlight();
-        statusMsgDiv.innerText = myTurn ? "🔫 ТВОЙ ХОД! ЖМИ ВЫСТРЕЛ!" : "⏳ Ожидаем ход другого игрока...";
+        statusMsgDiv.innerText = myTurn ? "🔫 ТВОЙ ХОД! СТРЕЛЯЙ!" : "⏳ Ожидаем ход другого...";
     });
 
     socket.on('turn-update', (data) => {
@@ -576,7 +575,8 @@
         myRoomId = null;
     });
 
-    checkAutoLogin();
+    // === НАЧАЛО ===
+    showAuthScreen();
 </script>
 </body>
 </html>
