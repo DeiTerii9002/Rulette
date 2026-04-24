@@ -15,13 +15,7 @@
             align-items: center;
             padding: 20px;
         }
-        .app {
-            max-width: 1200px;
-            width: 100%;
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
+        .app { max-width: 1200px; width: 100%; display: flex; gap: 20px; flex-wrap: wrap; }
         .rooms-panel {
             background: #2d221c;
             border-radius: 30px;
@@ -155,7 +149,6 @@
 <script>
     const socket = io();
     
-    // Состояние
     let loggedIn = false;
     let currentUser = null;
     let currentRoom = null;
@@ -166,7 +159,6 @@
     let turnPlayerId = null;
     let myId = null;
 
-    // DOM
     const authOverlay = document.getElementById('authOverlay');
     const authTitle = document.getElementById('authTitle');
     const authLogin = document.getElementById('authLogin');
@@ -190,7 +182,6 @@
 
     let isLoginMode = true;
 
-    // Авторизация
     function loadUsers() {
         const data = localStorage.getItem('rr_users');
         return data ? JSON.parse(data) : {};
@@ -228,8 +219,7 @@
                 currentUser = res;
                 loggedIn = true;
                 authOverlay.classList.add('hidden');
-                socket.emit('set-user', currentUser);
-                socket.emit('get-rooms');
+                socket.emit('login', { username: currentUser, password: pass });
             }
         } else {
             if (register(user, pass)) {
@@ -243,14 +233,12 @@
         }
     };
 
-    // Скример
     function playScreamer() {
         screamer.classList.add('active');
         try { new Audio('https://www.myinstants.com/media/sounds/scream-soundeffect.mp3').play().catch(e=>{}); } catch(e) {}
         setTimeout(() => screamer.classList.remove('active'), 1000);
     }
 
-    // UI обновления
     function updateRoomsList(rooms) {
         roomsListDiv.innerHTML = '';
         rooms.forEach(room => {
@@ -288,7 +276,6 @@
         }
     }
 
-    // Обработчики кнопок
     createRoomBtn.onclick = () => {
         if (!loggedIn) { alert('Войдите сначала'); return; }
         if (currentRoom) { alert('Вы уже в комнате'); return; }
@@ -320,7 +307,6 @@
         gameStarted = false;
         myTurn = false;
         players = [];
-        socket.emit('get-rooms');
     };
 
     logoutBtn.onclick = () => {
@@ -329,17 +315,24 @@
         currentRoom = null;
         gamePanel.style.display = 'none';
         authOverlay.classList.remove('hidden');
-        socket.emit('leave-room');
-        location.reload();
+        authLogin.value = '';
+        authPassword.value = '';
+        socket.disconnect();
+        setTimeout(() => location.reload(), 100);
     };
 
-    // Сокеты
     socket.on('connect', () => {
         myId = socket.id;
-        if (loggedIn && currentUser) socket.emit('set-user', currentUser);
+        if (loggedIn && currentUser) {
+            socket.emit('login', { username: currentUser, password: '' });
+            if (currentRoom) socket.emit('join-room', currentRoom);
+        }
     });
 
-    socket.on('user-set', (user) => { console.log('User set:', user); });
+    socket.on('login-success', (user) => {
+        console.log('Logged in as:', user);
+        socket.emit('get-rooms');
+    });
 
     socket.on('rooms-list', (rooms) => updateRoomsList(rooms));
 
@@ -350,7 +343,6 @@
         statusMsgDiv.innerText = `Комната ${roomId} создана. Ждём игроков.`;
         startBtn.style.display = 'block';
         gamePanel.style.display = 'block';
-        socket.emit('get-rooms');
     });
 
     socket.on('joined-room', (roomId) => {
@@ -360,7 +352,6 @@
         statusMsgDiv.innerText = `Вы вошли в комнату ${roomId}`;
         startBtn.style.display = 'none';
         gamePanel.style.display = 'block';
-        socket.emit('get-rooms');
     });
 
     socket.on('room-players', (playersList) => {
@@ -380,8 +371,8 @@
 
     socket.on('turn-change', (data) => {
         if (!gameStarted) return;
-        myTurn = (data.player === myId);
-        turnPlayerId = data.player;
+        myTurn = (data.playerId === myId);
+        turnPlayerId = data.playerId;
         enableShoot(myTurn);
         updatePlayersUI();
         statusMsgDiv.innerText = myTurn ? "ТВОЙ ХОД! СТРЕЛЯЙ!" : "Ждём ход другого игрока...";
@@ -390,7 +381,7 @@
     socket.on('shot-result', (data) => {
         if (data.dead) {
             gunIcon.innerHTML = "💀 💥 💀";
-            if (data.player === myId) {
+            if (data.playerId === myId) {
                 statusMsgDiv.innerText = "ТЫ УМЕР!";
                 enableShoot(false);
                 playScreamer();
@@ -404,12 +395,12 @@
         }
     });
 
-    socket.on('player-left', (data) => {
+    socket.on('player-died', (data) => {
         players = data.players;
         updatePlayersUI();
     });
 
-    socket.on('game-ended', (data) => {
+    socket.on('game-over', (data) => {
         gameStarted = false;
         if (data.winner) statusMsgDiv.innerText = `ПОБЕДИТЕЛЬ: ${data.winner}!`;
         else statusMsgDiv.innerText = "ИГРА ОКОНЧЕНА";
@@ -421,13 +412,11 @@
     socket.on('left-room', () => {
         currentRoom = null;
         gamePanel.style.display = 'none';
-        socket.emit('get-rooms');
     });
 
     socket.on('error', (msg) => { alert(msg); });
 
-    // Начало
-    authOverlay.classList.remove('hidden');
+    socket.on('get-rooms', () => { socket.emit('get-rooms'); });
 </script>
 </body>
 </html>
